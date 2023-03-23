@@ -63,10 +63,10 @@ parser.add_argument("--norm_name", default="instance", type=str, help="normaliza
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
 parser.add_argument("--feature_size", default=48, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-parser.add_argument("--out_channels", default=14, type=int, help="number of output channels")
+parser.add_argument("--out_channels", default=1, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
-parser.add_argument("--a_min", default=-175.0, type=float, help="a_min in ScaleIntensityRanged")
-parser.add_argument("--a_max", default=250.0, type=float, help="a_max in ScaleIntensityRanged")
+parser.add_argument("--a_min", default=-0.0, type=float, help="a_min in ScaleIntensityRanged")
+parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
 parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
@@ -92,6 +92,7 @@ parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
 parser.add_argument("--squared_dice", action="store_true", help="use squared Dice")
 
+parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 
 def main():
     args = parser.parse_args()

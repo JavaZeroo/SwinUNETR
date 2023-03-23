@@ -18,6 +18,40 @@ import torch
 from monai import data, transforms
 from monai.data import load_decathlon_datalist
 
+from monai.transforms.transform import Transform
+from monai.transforms.transform import MapTransform
+from monai.config import KeysCollection
+from typing import Dict, Hashable, Mapping
+from monai.config.type_definitions import NdarrayOrTensor
+
+class Copy(Transform):
+    def __init__(self, num_channel):
+        self.num_channel = num_channel
+
+    def __call__(self, data):
+        assert isinstance(data, torch.Tensor)
+        data = data.repeat(1, self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
+        return data
+    
+class Copyd(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
+    """
+    def __init__(self, keys: KeysCollection, num_channel) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+        """
+        super().__init__(keys, )
+        self.adder = Copy(num_channel)
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.adder(d[key])
+        return d
 
 class Sampler(torch.utils.data.Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
@@ -72,7 +106,8 @@ def get_loader(args):
     train_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"], reader="PILReader"),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.AddChanneld(keys=["image"]),
+            Copyd(keys=["label"], num_channel=args.num_channel), 
             transforms.Orientationd(keys=["image", "label"], axcodes="RAS"),
             transforms.Spacingd(
                 keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
@@ -103,7 +138,8 @@ def get_loader(args):
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.AddChanneld(keys=["image"]),
+            Copyd(keys=["label"], num_channel=args.num_channel), 
             transforms.Orientationd(keys=["image", "label"], axcodes="RAS"),
             transforms.Spacingd(
                 keys=["image", "label"], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest")
@@ -119,7 +155,8 @@ def get_loader(args):
     test_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label"]),
-            transforms.AddChanneld(keys=["image", "label"]),
+            transforms.AddChanneld(keys=["image"]),
+            Copyd(keys=["label"], num_channel=args.num_channel), 
             # transforms.Orientationd(keys=["image"], axcodes="RAS"),
             transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
             transforms.ScaleIntensityRanged(
