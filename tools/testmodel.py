@@ -12,8 +12,20 @@ from monai.transforms import *
 from pathlib import Path
 from monai.networks.nets import SwinUNETR
 import torch
+import torch.nn as nn
+from monai.losses import DiceCELoss
+
 print(monai.__version__)
 torch.cuda.set_device(0)
+
+a = torch.ones(1, 1, 1, 64, 64)
+b = a.clone()
+a[:, : , :, 10:20, 10:20]=0
+print(a[:, : , :, 9:11, 9:11])
+print(b[:, : , :, 9:11, 9:11])
+dice_loss = DiceCELoss()
+loss = dice_loss(a, b)
+print(loss)
 
 
 
@@ -125,52 +137,61 @@ raw = RandCropByPosNegLabel(
     image_threshold=0,
 )(raw, label=seg)
 print(f"RandCropByPosNegLabel: {raw[0].shape}")
-print(type(raw))
-raw = RandFlip( prob=0.2,  spatial_axis=0)(raw)
-print(f"RandFlip: {raw[0].shape}")
+print(type(raw[0]))
+raw = RandFlip( prob=0.2,  spatial_axis=0)(raw[0])
+print(f"RandFlip: {raw.shape}")
 raw = RandFlip( prob=0.2, spatial_axis=1)(raw)
-print(f"RandFlip: {raw[0].shape}")
+print(f"RandFlip: {raw.shape}")
 raw = RandFlip( prob=0.2, spatial_axis=2)(raw)
-print(f"RandFlip: {raw[0].shape}")
+print(f"RandFlip: {raw.shape}")
 raw = RandRotate90( prob=0.2, max_k=3)(raw)
-print(f"RandRotate90: {raw[0].shape}")
 raw = RandScaleIntensity(factors=0.1, prob=0.1)(raw)
-print(f"RandScaleIntensity: {raw[0].shape}")
 raw = RandShiftIntensity(offsets=0.1, prob=0.1)(raw)
-print(f"RandShiftIntensity: {raw[0].shape}")
+raw = AddChannel()(raw)
 raw = ToTensor()(raw)
 print(f"{type(raw)}")
 raw = torch.Tensor(raw).cuda(0)
-print(f"{type(raw)}")
+print(raw.size())
 
 
 
-# raw_croped = raw[:,1000:1100,1000:1100]
-# data = torch.Tensor(raw_croped).view(1, raw_croped.shape[0], raw_croped.shape[1], raw_croped.shape[2]).cuda(0)
+raw_croped = raw[:,1000:1100,1000:1100]
+data = torch.Tensor(raw_croped).view(1, raw_croped.shape[0], raw_croped.shape[1], raw_croped.shape[2]).cuda(0)
 
 # (batch_size, in_channel, H, W, D)
 data = torch.rand((1, 1, 96, 96, 96)).cuda(0)
 data.size()
 
 
+class MyModel(nn.Module):
+    def __init__(self,img_size=(64, 64, 64)):
+        super().__init__()
+        self.swinUNETR = SwinUNETR(
+                                img_size=img_size,
+                                in_channels=1,
+                                out_channels=1,
+                                feature_size=12,
+                                use_checkpoint=True)
+        self.conv = nn.Conv2d(64, 1, 1, 1)
+    
+    def forward(self, x):
+        x_out = self.swinUNETR(x)[0]
+        print(x_out.size())
+        x_out = self.conv(x_out)
+        print(x_out.size())
+        return x_out
 
-model = SwinUNETR(
-    img_size=(96, 96, 96),
-    in_channels=1,
-    out_channels=1,
-    feature_size=12,
-    use_checkpoint=True,
-).cuda(0)
+model = MyModel().cuda(0)
 
 model.eval()
 
 
 torch.cuda.empty_cache()
 with torch.no_grad():
-    out = model(data)
+    out = model(raw)
 print(type(out))
 print(out.size())
-del out, data
+del out, raw
 torch.cuda.empty_cache()
 
 

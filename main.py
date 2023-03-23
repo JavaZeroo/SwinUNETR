@@ -26,18 +26,18 @@ from utils.data_utils import get_loader
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
-from monai.networks.nets import SwinUNETR
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 
+from utils.myModel import MyModel
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
 parser.add_argument(
     "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
 )
-parser.add_argument("--data_dir", default="/mnt/e/Code/vesuvius-challenge-ink-detection", type=str, help="dataset directory")
-parser.add_argument("--json_list", default="my.json", type=str, help="dataset json file")
+parser.add_argument("--data_dir", default="/root/autodl-tmp/vesuvius-challenge-ink-detection", type=str, help="dataset directory")
+parser.add_argument("--json_list", default="first.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
     default="swin_unetr.epoch.b4_5000ep_f48_lr2e-4_pretrained.pt",
@@ -61,7 +61,7 @@ parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, hel
 parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization name")
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
-parser.add_argument("--feature_size", default=48, type=int, help="feature size")
+parser.add_argument("--feature_size", default=12, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=1, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
@@ -128,20 +128,11 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_dir = args.pretrained_dir
-    model = SwinUNETR(
-        img_size=(args.roi_x, args.roi_y, args.roi_z),
-        in_channels=args.in_channels,
-        out_channels=args.out_channels,
-        feature_size=args.feature_size,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        dropout_path_rate=args.dropout_path_rate,
-        use_checkpoint=args.use_checkpoint,
-    )
+    model = MyModel()
 
     if args.resume_ckpt:
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        model.load_state_dict(model_dict)
+        model.load_swin_ckpt(model_dict)
         print("Use pretrained weights")
 
     if args.use_ssl_pretrained:
@@ -161,17 +152,15 @@ def main_worker(gpu, args):
             # We now load model weights, setting param `strict` to False, i.e.:
             # this load the encoder weights (Swin-ViT, SSL pre-trained), but leaves
             # the decoder weights untouched (CNN UNet decoder).
-            model.load_state_dict(state_dict, strict=False)
+            model.load_swin_ckpt(state_dict, strict=False)
             print("Using pretrained self-supervised Swin UNETR backbone weights !")
         except ValueError:
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
     if args.squared_dice:
-        dice_loss = DiceCELoss(
-            to_onehot_y=True, softmax=True, squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr
-        )
+        dice_loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     else:
-        dice_loss = DiceCELoss(to_onehot_y=True, softmax=True)
+        dice_loss = DiceCELoss() # Normally
     post_label = AsDiscrete(to_onehot=True, n_classes=args.out_channels)
     post_pred = AsDiscrete(argmax=True, to_onehot=True, n_classes=args.out_channels)
     dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN, get_not_nans=True)
@@ -196,7 +185,7 @@ def main_worker(gpu, args):
         new_state_dict = OrderedDict()
         for k, v in checkpoint["state_dict"].items():
             new_state_dict[k.replace("backbone.", "")] = v
-        model.load_state_dict(new_state_dict, strict=False)
+        model.load_swin_ckpt(new_state_dict, strict=False)
         if "epoch" in checkpoint:
             start_epoch = checkpoint["epoch"]
         if "best_acc" in checkpoint:
