@@ -7,16 +7,18 @@ class MyModel(nn.Module):
         self.swinUNETR = SwinUNETR(
                                 img_size=img_size,
                                 in_channels=1,
-                                out_channels=1,
+                                out_channels=14,
                                 feature_size=12,
                                 use_checkpoint=True)
-        self.conv = nn.Conv2d(64, 1, 1, 1)
+        self.conv1 = nn.Conv3d(14, 1, 1)
+        self.conv2 = nn.Conv2d(64, 1, 1)
     
     def forward(self, x):
         x_out = self.swinUNETR(x)[0]
-        print(x_out.size())
-        x_out = self.conv(x_out)
-        print(x_out.size())
+        # print(x_out.size())
+        x_out = self.conv1(x_out)
+        x_out = self.conv2(x_out)
+        # print(x_out.size())
         return x_out
     
     def load_swin_ckpt(self, model_dict, strict: bool = True):

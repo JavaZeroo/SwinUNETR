@@ -102,7 +102,7 @@ files = [ROOT / f for f in files]
 label = ROOT / 'train' / '1'/ 'mask.png'
 labels = [label for i in range(len(files))]
 print("Loading data...")
-# raw, meta = LoadImage(image_only=False, reader='PILReader')(files)
+raw, meta = LoadImage(image_only=False, reader='PILReader')(files)
 raw = torch.rand(65, 1000, 1500)
 seg = torch.rand(65, 1000, 1500)
 # seg, _ = LoadImage(image_only=False, reader='PILReader')(labels)
