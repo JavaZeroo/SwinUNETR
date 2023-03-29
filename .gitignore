@@ -3,3 +3,4 @@ swin_unetr.tiny_5000ep_f12_lr2e-4_pretrained.pt
 DET0000101_avg.nii.gz
 DET0000101_avg_seg.nii.gz
 runs/
+.vscode/

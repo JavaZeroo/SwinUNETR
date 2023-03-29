@@ -83,8 +83,8 @@
                 "train/1/surface_volume/63.tif",
                 "train/1/surface_volume/64.tif"
             ],
-            "label": "train/1/mask.png",
-            "inklabels": "train/1/inklabels.png"
+            "label": ["train/1/mask.png"],
+            "inklabels": ["train/1/inklabels.png"]
         },
         {
             "image": [
@@ -154,8 +154,8 @@
                 "train/2/surface_volume/63.tif",
                 "train/2/surface_volume/64.tif"
             ],
-            "label": "train/2/mask.png",
-            "inklabels": "train/2/inklabels.png"
+            "label": ["train/2/mask.png"],
+            "inklabels": ["train/2/inklabels.png"]
         },
         {
             "image": [
@@ -225,8 +225,8 @@
                 "train/3/surface_volume/63.tif",
                 "train/3/surface_volume/64.tif"
             ],
-            "label": "train/3/mask.png",
-            "inklabels": "train/3/inklabels.png"
+            "label": ["train/3/mask.png"],
+            "inklabels": ["train/3/inklabels.png"]
         }
     ],
     "validation": [],
@@ -299,7 +299,7 @@
                 "test/a/surface_volume/63.tif",
                 "test/a/surface_volume/64.tif"
             ],
-            "label": "train/3/mask.png"
+            "label": ["train/3/mask.png"]
         },
         {
             "image": [
@@ -369,7 +369,7 @@
                 "test/b/surface_volume/63.tif",
                 "test/b/surface_volume/64.tif"
             ],
-            "label": "train/3/mask.png"
+            "label": ["train/3/mask.png"]
         }
     ]
 }

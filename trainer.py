@@ -32,7 +32,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         if isinstance(batch_data, list):
             data, target = batch_data
         else:
-            data, target = batch_data["image"], batch_data["label"]
+            data, target = batch_data["image"], batch_data["inklabels"]
         data, target = data.cuda(args.rank), target.cuda(args.rank)
         for param in model.parameters():
             param.grad = None
@@ -75,7 +75,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
             if isinstance(batch_data, list):
                 data, target = batch_data
             else:
-                data, target = batch_data["image"], batch_data["label"]
+                data, target = batch_data["image"], batch_data["inklabels"]
             data, target = data.cuda(args.rank), target.cuda(args.rank)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:

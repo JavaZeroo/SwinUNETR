@@ -40,7 +40,7 @@ parser.add_argument("--data_dir", default="/root/autodl-tmp/vesuvius-challenge-i
 parser.add_argument("--json_list", default="first.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
-    default="swin_unetr.epoch.b4_5000ep_f48_lr2e-4_pretrained.pt",
+    default="swin_unetr.tiny_5000ep_f12_lr2e-4_pretrained.pt",
     type=str,
     help="pretrained model name",
 )
@@ -69,9 +69,9 @@ parser.add_argument("--a_min", default=-0.0, type=float, help="a_min in ScaleInt
 parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
 parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
-parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
-parser.add_argument("--space_z", default=2.0, type=float, help="spacing in z direction")
+parser.add_argument("--space_x", default=2.0, type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=2.0, type=float, help="spacing in y direction")
+parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
 parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
 parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
 parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
@@ -221,6 +221,9 @@ def main_worker(gpu, args):
             scheduler.step(epoch=start_epoch)
     else:
         scheduler = None
+    print("Lodaer test")
+    for i in loader[0]:
+        print(i)
     accuracy = run_training(
         model=model,
         train_loader=loader[0],
