@@ -28,6 +28,7 @@ from monai.losses import DiceCELoss
 from monai.metrics import DiceMetric
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
+from monai.visualize import matshow3d
 
 from utils.myModel import MyModel
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -36,8 +37,8 @@ parser.add_argument("--logdir", default="test", type=str, help="directory to sav
 parser.add_argument(
     "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
 )
-parser.add_argument("--data_dir", default="/root/autodl-tmp/vesuvius-challenge-ink-detection", type=str, help="dataset directory")
-parser.add_argument("--json_list", default="first.json", type=str, help="dataset json file")
+parser.add_argument("--data_dir", default="/mnt/e/Code/ink_data", type=str, help="dataset directory")
+parser.add_argument("--json_list", default="/mnt/e/Code/ink_data/fourth.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
     default="swin_unetr.tiny_5000ep_f12_lr2e-4_pretrained.pt",
@@ -65,16 +66,16 @@ parser.add_argument("--feature_size", default=12, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=1, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
-parser.add_argument("--a_min", default=-0.0, type=float, help="a_min in ScaleIntensityRanged")
+parser.add_argument("--a_min", default=0.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
 parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
-parser.add_argument("--space_x", default=2.0, type=float, help="spacing in x direction")
-parser.add_argument("--space_y", default=2.0, type=float, help="spacing in y direction")
+parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
+parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=96, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=96, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=96, type=int, help="roi size in z direction")
+parser.add_argument("--roi_x", default=64, type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=64, type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=64, type=int, help="roi size in z direction")
 parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
 parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
 parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
@@ -224,6 +225,10 @@ def main_worker(gpu, args):
     print("Lodaer test")
     for i in loader[0]:
         print(i)
+        print(type(i))
+        break
+    print("Pass Test")
+    print(args)
     accuracy = run_training(
         model=model,
         train_loader=loader[0],

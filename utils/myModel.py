@@ -11,14 +11,13 @@ class MyModel(nn.Module):
                                 feature_size=12,
                                 use_checkpoint=True)
         self.conv1 = nn.Conv3d(14, 1, 1)
-        self.conv2 = nn.Conv2d(64, 1, 1)
+        self.conv2 = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=(64, 1, 1), stride=1)
+
     
     def forward(self, x):
-        x_out = self.swinUNETR(x)[0]
-        # print(x_out.size())
+        x_out = self.swinUNETR(x)
         x_out = self.conv1(x_out)
         x_out = self.conv2(x_out)
-        # print(x_out.size())
         return x_out
     
     def load_swin_ckpt(self, model_dict, strict: bool = True):

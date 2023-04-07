@@ -4,3 +4,5 @@ DET0000101_avg.nii.gz
 DET0000101_avg_seg.nii.gz
 runs/
 .vscode/
+.ipynb_checkpoints/
+__pycache__*
