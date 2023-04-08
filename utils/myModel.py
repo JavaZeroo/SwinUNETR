@@ -15,6 +15,9 @@ class MyModel(nn.Module):
 
     
     def forward(self, x):
+        if x[0].size() != (1, 64, 64, 64):
+            print(x.size())
+            raise ValueError("Input size is not correct")
         x_out = self.swinUNETR(x)
         x_out = self.conv1(x_out)
         x_out = self.conv2(x_out)

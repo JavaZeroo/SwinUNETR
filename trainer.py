@@ -34,6 +34,11 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         else:
             data, target = batch_data["image"], batch_data["inklabels"]
         data, target = data.cuda(args.rank), target.cuda(args.rank)
+        
+        if data[0].size() != (1, 64, 64, 64):
+            print("data error skip!")
+            continue
+        
         for param in model.parameters():
             param.grad = None
         with autocast(enabled=args.amp):
