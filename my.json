@@ -1,0 +1,35 @@
+{
+    "training":[
+        {
+            "image":["train/1/surface_volume.npy"],
+            "label":["train/1/mask.npy"], 
+            "ir":["train/1/ir.npy"],
+            "inklabels":["train/1/inklabels.npy"]
+        },
+        {
+            "image":["train/2/surface_volume.npy"],
+            "label":["train/2/mask.npy"], 
+            "ir":["train/2/ir.npy"],
+            "inklabels":["train/2/inklabels.npy"]
+        }
+    ],
+    "validation":[
+        {
+            "image":["train/3/surface_volume.npy"],
+            "label":["train/3/mask.npy"], 
+            "ir":["train/3/ir.npy"],
+            "inklabels":["train/3/inklabels.npy"]
+        }
+    ],
+    "testing":[
+        {
+            "image":["test/a/surface_volume.npy"],
+            "label":["test/a/mask.npy"]
+
+        },
+        {
+            "image":["test/b/surface_volume.npy"],
+            "label":["test/b/mask.npy"]
+        }
+    ]
+}

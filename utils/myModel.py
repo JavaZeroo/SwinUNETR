@@ -8,7 +8,7 @@ class MyModel(nn.Module):
                                 img_size=img_size,
                                 in_channels=1,
                                 out_channels=14,
-                                feature_size=12,
+                                feature_size=48,
                                 use_checkpoint=True)
         self.conv1 = nn.Conv3d(14, 1, 1)
         self.conv2 = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=(64, 1, 1), stride=1)

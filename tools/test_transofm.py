@@ -84,6 +84,10 @@ images = [
 ROOT = Path('/mnt/e/Code/ink_data')
 files = [str(ROOT / f) for f in images]
 from monai.data import PILReader
+import sys
+sys.path.append('..')
+sys.path.append('.')
+from utils.myModel import MyModel
 
 
 import math
@@ -155,37 +159,76 @@ train_transform = transforms.Compose(
         ),
     ]
 )
+
+
+val_transform = Compose(
+    [
+        LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+        AddChanneld(keys=["image"]),
+        Copyd(keys=["label", 'inklabels'], num_channel=65), 
+        Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+        # Spacingd(
+        #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+        # ),
+        ScaleIntensityRanged(
+            keys=["image"], a_min=0.0, a_max=65535.0, b_min=0.0, b_max=1.0, clip=False
+        ),
+        CropForegroundd(keys=["image", 'inklabels'], source_key="image"),
+        ToTensord(keys=["image", 'inklabels']),
+    ]
+)
 from monai.data import load_decathlon_datalist
 # import os
 # datalist_json = os.path.join("/root/autodl-tmp/vesuvius-challenge-ink-detection", "first.json")
-seg, _ = LoadImage(image_only=False)('/mnt/e/Code/ink_data/train/1/mask/mask_15.npy')
-print(seg.shape)
+# seg, _ = LoadImage(image_only=False)('/mnt/e/Code/ink_data/train/1/mask/mask_15.npy')
+# print(seg.shape)
 
-datalist = load_decathlon_datalist("thrid.json", True, "training", base_dir="/mnt/e/Code/ink_data")
-# mydict = {"image":files,'label': '/mnt/e/Code/ink_data/train/1/mask/mask_15.npy', "inklabels": "'/mnt/e/Code/ink_data/train/1/ink_label/ink_label_15.npy"}
+datalist = load_decathlon_datalist("/root/autodl-tmp/MyData/train.json", True, "validation", base_dir="/root/autodl-tmp/MyData")
 # print(mydict)
 fails = {"all":[]}
-print(datalist[0]['label'].split('/')[-3])
-print(datalist[0]['label'].split('/')[-1].split('_')[-1])
+print(datalist[0]['label'][0].split('/')[-3])
+print(datalist[0]['label'][0].split('/')[-1].split('_')[-1])
 from tqdm import tqdm
-for i in tqdm(range(len(datalist))):
+from monai.inferers import sliding_window_inference
+from functools import partial
+
+for i in range(len(datalist)):
+    batch_data = apply_transform(val_transform, datalist[i])
+    # print(batch_data["image"].shape)
+    model = MyModel().cuda(0)
+
+    model.eval()
+    model_inferer = partial(
+    sliding_window_inference,
+    roi_size=(64,64,64),
+    sw_batch_size=4,
+    predictor=model,
+    overlap=0.5,
+    )
+    with torch.no_grad():
+        img, target = batch_data["image"], batch_data["inklabels"]
+        img = img.view(1, 1, 65, 633, 909).cuda(0)
+        print(img.shape)
+        logits = model_inferer(img)
+        logits = logits.cpu()
+        print(logits.shape)
     try:
-        img = apply_transform(train_transform, datalist[i])
+        pass
     except:
-        add_line = {"img":str(datalist[i]['label'].split('/')[-3]), 'nums':datalist[i]['label'].split('/')[-1].split('_')[-1]}
+        add_line = {"img":str(datalist[i]['label'][0].split('/')[-3]), 'nums':datalist[i]['label'][0].split('/')[-1].split('_')[-1]}
         fails['all'].append(add_line)
         print(add_line)
-        continue
-    for j in range(len(img)):
-        # check size if it is 1x64x64x64
-        try:
-            if img[j]['image'].shape != (1, 64, 64, 64) or img[j]['label'].shape != (1, 64, 64, 64):
-                print(img[j]['image'].shape, img[j]['label'].shape, img[j]['inklabels'].shape)
-        except:
-            print(img)
-            print(datalist[i]['label'])
-            print("==================Attention!!!==================")
-            continue
-import json           
-with open("fails.json", "w") as f:
-    json.dump(fails, f)
+        break
+    # for j in range(len(img)):
+    #     # check size if it is 1x64x64x64
+    #     try:
+    #         if img[j]['image'].shape != (1, 64, 64, 64) or img[j]['label'].shape != (1, 64, 64, 64):
+    #             print(img[j]['image'].shape, img[j]['label'].shape, img[j]['inklabels'].shape)
+    #     except:
+    #         print(img)
+    #         print(datalist[i]['label'])
+    #         print("==================Attention!!!==================")
+    #         continue
+# import json           
+# with open("fails.json", "w") as f:
+#     json.dump(fails, f)

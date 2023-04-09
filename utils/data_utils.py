@@ -122,10 +122,10 @@ def get_loader(args):
                 spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                 pos=1,
                 neg=0,
-                num_samples=4,
+                num_samples=24,
                 image_key="image",
                 image_threshold=0,
-                allow_smaller=True,
+                allow_smaller=False,
             ),
 
             transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=0),

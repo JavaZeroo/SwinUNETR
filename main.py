@@ -37,11 +37,11 @@ parser.add_argument("--logdir", default="test", type=str, help="directory to sav
 parser.add_argument(
     "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
 )
-parser.add_argument("--data_dir", default="/mnt/e/Code/ink_data", type=str, help="dataset directory")
-parser.add_argument("--json_list", default="/mnt/e/Code/ink_data/fourth.json", type=str, help="dataset json file")
+parser.add_argument("--data_dir", default="/root/autodl-tmp/MyData", type=str, help="dataset directory")
+parser.add_argument("--json_list", default="/root/autodl-tmp/MyData/train.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
-    default="swin_unetr.tiny_5000ep_f12_lr2e-4_pretrained.pt",
+    default="swin_unetr.base_5000ep_f48_lr2e-4_pretrained",
     type=str,
     help="pretrained model name",
 )
@@ -167,10 +167,10 @@ def main_worker(gpu, args):
     dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN, get_not_nans=True)
     model_inferer = partial(
         sliding_window_inference,
-        roi_size=inf_size,
-        sw_batch_size=args.sw_batch_size,
+        roi_size=(64,64,64),
+        sw_batch_size=4,
         predictor=model,
-        overlap=args.infer_overlap,
+        overlap=0.5,
     )
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
