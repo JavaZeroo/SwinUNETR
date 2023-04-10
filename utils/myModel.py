@@ -1,5 +1,6 @@
 import torch.nn as nn
 from monai.networks.nets import SwinUNETR
+from monai.networks.blocks.convolutions import Convolution
 
 class MyModel(nn.Module):
     def __init__(self,img_size=(64, 64, 64)):
@@ -10,8 +11,8 @@ class MyModel(nn.Module):
                                 out_channels=14,
                                 feature_size=48,
                                 use_checkpoint=True)
-        self.conv1 = nn.Conv3d(14, 1, 1)
-        self.conv2 = nn.Conv3d(in_channels=1, out_channels=1, kernel_size=(64, 1, 1), stride=1)
+        self.conv1 = Convolution(spatial_dims=3, in_channels=14, out_channels=1, kernel_size=1)
+        self.conv2 = Convolution(spatial_dims=3, in_channels=1, out_channels=1, kernel_size=(64, 1, 1), strides=1, padding=0, act="sigmoid")
 
     
     def forward(self, x):

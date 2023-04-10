@@ -24,7 +24,7 @@ from trainer import run_training
 from utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss
+from monai.losses import DiceCELoss, FocalLoss
 from monai.metrics import DiceMetric
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
@@ -37,8 +37,8 @@ parser.add_argument("--logdir", default="test", type=str, help="directory to sav
 parser.add_argument(
     "--pretrained_dir", default="./pretrained_models/", type=str, help="pretrained checkpoint directory"
 )
-parser.add_argument("--data_dir", default="/root/autodl-tmp/MyData", type=str, help="dataset directory")
-parser.add_argument("--json_list", default="/root/autodl-tmp/MyData/train.json", type=str, help="dataset json file")
+parser.add_argument("--data_dir", default="/root/autodl-tmp/data_split", type=str, help="dataset directory")
+parser.add_argument("--json_list", default="/root/autodl-tmp/data_split/data_split.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
     default="swin_unetr.base_5000ep_f48_lr2e-4_pretrained",
@@ -62,7 +62,7 @@ parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, hel
 parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization name")
 parser.add_argument("--workers", default=8, type=int, help="number of workers")
-parser.add_argument("--feature_size", default=12, type=int, help="feature size")
+parser.add_argument("--feature_size", default=48, type=int, help="feature size")
 parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=1, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
@@ -92,6 +92,7 @@ parser.add_argument("--use_checkpoint", action="store_true", help="use gradient 
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-supervised pretrained weights")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
 parser.add_argument("--squared_dice", action="store_true", help="use squared Dice")
+parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 
@@ -158,10 +159,14 @@ def main_worker(gpu, args):
         except ValueError:
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
-    if args.squared_dice:
-        dice_loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
+    if args.focalLoss:
+        loss = FocalLoss()
+    elif args.squared_dice:
+        loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     else:
-        dice_loss = DiceCELoss() # Normally
+        loss = DiceCELoss(include_background=False, sigmoid=True) # Normally
+        
+    
     post_label = AsDiscrete(to_onehot=args.out_channels)
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN, get_not_nans=True)
@@ -234,7 +239,7 @@ def main_worker(gpu, args):
         train_loader=loader[0],
         val_loader=loader[1],
         optimizer=optimizer,
-        loss_func=dice_loss,
+        loss_func=loss,
         acc_func=dice_acc,
         args=args,
         model_inferer=model_inferer,

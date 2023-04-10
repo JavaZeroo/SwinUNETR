@@ -122,7 +122,7 @@ def get_loader(args):
                 spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                 pos=1,
                 neg=0,
-                num_samples=24,
+                num_samples=2,
                 image_key="image",
                 image_threshold=0,
                 allow_smaller=False,
@@ -188,7 +188,7 @@ def get_loader(args):
             train_ds = data.Dataset(data=datalist, transform=train_transform)
         else:
             train_ds = data.SmartCacheDataset(
-                data=datalist, transform=train_transform, cache_rate=1.0, num_init_workers=args.workers
+                data=datalist, transform=train_transform, cache_rate=0.3, num_init_workers=args.workers
             )
         train_sampler = Sampler(train_ds) if args.distributed else None
         train_loader = data.DataLoader(
