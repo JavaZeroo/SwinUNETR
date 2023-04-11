@@ -24,20 +24,27 @@ from monai.config import KeysCollection
 from typing import Dict, Hashable, Mapping
 from monai.config.type_definitions import NdarrayOrTensor
 
-class Copy(Transform):
-    def __init__(self, num_channel):
-        self.num_channel = num_channel
-
-    def __call__(self, data):
-        assert isinstance(data, torch.Tensor)
-        data = data.repeat(1, self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
-        return data
+class Drop1Layer(Transform):
+    def __init__(self):
+        pass
     
-class Copyd(MapTransform):
+    def __call__(self, data):
+        data_shape = data.shape
+        if len(data_shape) == 3:
+            y,_,_ = data_shape
+            ret = data[:y-1, :, :]
+        elif len(data_shape) == 4:
+            _,y,_,_ = data_shape
+            ret = data[:, :y-1, :, :]
+        else:
+            raise Exception("Input demention error")
+        return ret
+    
+class Drop1Layerd(MapTransform):
     """
     Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
     """
-    def __init__(self, keys: KeysCollection, num_channel) -> None:
+    def __init__(self, keys: KeysCollection) -> None:
         """
         Args:
             keys: keys of the corresponding items to be transformed.
@@ -45,7 +52,39 @@ class Copyd(MapTransform):
             allow_missing_keys: don't raise exception if key is missing.
         """
         super().__init__(keys, )
-        self.adder = Copy(num_channel)
+        self.adder = Drop1Layer()
+
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.adder(d[key])
+        return d
+    
+class Copy(Transform):
+    def __init__(self, num_channel, add_channel=False):
+        self.num_channel = num_channel
+        self.add_channel = add_channel
+
+    def __call__(self, data):
+        if self.add_channel:
+            data = data.repeat(1, self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
+        else:
+            data = data.repeat(self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
+        return data
+    
+class Copyd(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
+    """
+    def __init__(self, keys: KeysCollection, num_channel, add_channel=False) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+        """
+        super().__init__(keys, )
+        self.adder = Copy(num_channel, add_channel)
 
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
         d = dict(data)
@@ -107,7 +146,7 @@ def get_loader(args):
         [
             transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
             transforms.AddChanneld(keys=["image"]),
-            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
+            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel, add_channel=True), 
             transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
             # transforms.Spacingd(
             #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
@@ -121,8 +160,8 @@ def get_loader(args):
                 label_key="label",
                 spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                 pos=1,
-                neg=0,
-                num_samples=2,
+                neg=1,
+                num_samples=1,
                 image_key="image",
                 image_threshold=0,
                 allow_smaller=False,
@@ -140,16 +179,18 @@ def get_loader(args):
     val_transform = transforms.Compose(
         [
             transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
-            transforms.AddChanneld(keys=["image"]),
-            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
+            Copyd(keys=["label", 'inklabels'], num_channel=65), 
+            # transforms.GridSplitd(keys=["image", 'inklabels'], grid=(10,10)),
+            transforms.AddChanneld(keys=["image", "label", 'inklabels']),
             transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+            Drop1Layerd(keys=["image", 'inklabels']),
             # transforms.Spacingd(
             #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
             # ),
             transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                keys=["image"], a_min=0.0, a_max=65535.0, b_min=0.0, b_max=1.0, clip=True
             ),
-            transforms.CropForegroundd(keys=["image", 'inklabels'], source_key="image"),
+            transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
             transforms.ToTensord(keys=["image", 'inklabels']),
         ]
     )
@@ -188,13 +229,13 @@ def get_loader(args):
             train_ds = data.Dataset(data=datalist, transform=train_transform)
         else:
             train_ds = data.SmartCacheDataset(
-                data=datalist, transform=train_transform, cache_rate=0.3, num_init_workers=args.workers
+                data=datalist, transform=train_transform, cache_rate=0.5, num_init_workers=args.workers
             )
         train_sampler = Sampler(train_ds) if args.distributed else None
         train_loader = data.DataLoader(
             train_ds,
-            batch_size=args.batch_size,
-            shuffle=(train_sampler is None),
+            batch_size=1,
+            shuffle=True,
             num_workers=args.workers,
             sampler=train_sampler,
             pin_memory=True,

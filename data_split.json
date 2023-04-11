@@ -47,17 +47,16 @@
             "label":"mask_9.npy", 
             "ir":"ir_9.npy",
             "inklabels":"inklabels_9.npy"
-        }
-        
-        
-    ],
-    "validation":[
+        },
         {
             "image":"surface_volume_6.npy",
             "label":"mask_6.npy", 
             "ir":"ir_6.npy",
             "inklabels":"inklabels_6.npy"
-        },
+        }
+        
+    ],
+    "validation":[
         {
             "image":"surface_volume_10.npy",
             "label":"mask_10.npy", 
@@ -75,5 +74,9 @@
             "image":["test/b/surface_volume.npy"],
             "label":["test/b/mask.npy"]
         }
-    ]
+    ],
+    "labels": {
+        "0": "background",
+        "1": "ink"
+    }
 }

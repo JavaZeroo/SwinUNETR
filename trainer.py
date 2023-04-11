@@ -81,8 +81,8 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            data, target = data.cuda(args.rank), target.cuda(args.rank)
-            print(data.shape, target.shape)
+            data, target = data.cuda(args.rank), target[:, :, 0:1, :, :].cuda(args.rank)
+            # print(data.shape, target.shape)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:
                     logits = model_inferer(data)
@@ -90,24 +90,24 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                     logits = model(data)
             if not logits.is_cuda:
                 target = target.cpu()
-            val_labels_list = decollate_batch(target)
-            val_labels_convert = [post_label(val_label_tensor) for val_label_tensor in val_labels_list]
             val_outputs_list = decollate_batch(logits)
-            val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
+            # val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
+            val_labels_list = decollate_batch(target)
+            # val_labels_convert = [post_label(val_label_tensor) for val_label_tensor in val_labels_list]
             acc_func.reset()
-            acc_func(y_pred=val_output_convert, y=val_labels_convert)
+            acc_func(y_pred=val_outputs_list, y=val_labels_list)
             acc, not_nans = acc_func.aggregate()
             acc = acc.cuda(args.rank)
 
-            if args.distributed:
-                acc_list, not_nans_list = distributed_all_gather(
-                    [acc, not_nans], out_numpy=True, is_valid=idx < loader.sampler.valid_length
-                )
-                for al, nl in zip(acc_list, not_nans_list):
-                    run_acc.update(al, n=nl)
+            # if args.distributed:
+            #     acc_list, not_nans_list = distributed_all_gather(
+            #         [acc, not_nans], out_numpy=True, is_valid=idx < loader.sampler.valid_length
+            #     )
+            #     for al, nl in zip(acc_list, not_nans_list):
+            #         run_acc.update(al, n=nl)
 
-            else:
-                run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
+            # else:
+            run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
 
             if args.rank == 0:
                 avg_acc = np.mean(run_acc.avg)
@@ -167,7 +167,7 @@ def run_training(
         )
         if args.rank == 0:
             print(
-                "Final training  {}/{}".format(epoch, args.max_epochs - 1),
+                "Final training  {}/{}".format(epoch+1, args.max_epochs ),
                 "loss: {:.4f}".format(train_loss),
                 "time {:.2f}s".format(time.time() - epoch_time),
             )
@@ -178,6 +178,7 @@ def run_training(
             if args.distributed:
                 torch.distributed.barrier()
             epoch_time = time.time()
+            print("Start_val")
             val_avg_acc = val_epoch(
                 model,
                 val_loader,
@@ -188,7 +189,7 @@ def run_training(
                 post_label=post_label,
                 post_pred=post_pred,
             )
-
+            
             val_avg_acc = np.mean(val_avg_acc)
 
             if args.rank == 0:

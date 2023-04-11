@@ -25,7 +25,7 @@ from utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss, FocalLoss
-from monai.metrics import DiceMetric
+from monai.metrics import DiceMetric, MeanIoU
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
@@ -169,13 +169,18 @@ def main_worker(gpu, args):
     
     post_label = AsDiscrete(to_onehot=args.out_channels)
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
-    dice_acc = DiceMetric(include_background=True, reduction=MetricReduction.MEAN, get_not_nans=True)
+    dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
+    miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     model_inferer = partial(
         sliding_window_inference,
-        roi_size=(64,64,64),
-        sw_batch_size=4,
-        predictor=model,
-        overlap=0.5,
+        roi_size = (64,64,64),
+        sw_batch_size = 8,
+        predictor = model,
+        overlap = 0,
+        progress = True,
+        padding_mode = "reflect", 
+        device = "cpu", 
+        sw_device = "cuda"
     )
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -227,20 +232,20 @@ def main_worker(gpu, args):
             scheduler.step(epoch=start_epoch)
     else:
         scheduler = None
-    print("Lodaer test")
-    for i in loader[0]:
-        print(i)
-        print(type(i))
-        break
-    print("Pass Test")
-    print(args)
+    # print("Lodaer test")
+    # for i in loader[0]:
+    #     # print(i)
+    #     print(type(i))
+    #     break
+    # print("Pass Test")
+    # print(args)
     accuracy = run_training(
         model=model,
         train_loader=loader[0],
         val_loader=loader[1],
         optimizer=optimizer,
         loss_func=loss,
-        acc_func=dice_acc,
+        acc_func=miou_acc,
         args=args,
         model_inferer=model_inferer,
         scheduler=scheduler,
