@@ -31,6 +31,7 @@ from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
 from utils.myModel import MyModel
+
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
 parser.add_argument("--logdir", default="test", type=str, help="directory to save the tensorboard logs")
@@ -92,8 +93,8 @@ parser.add_argument("--use_checkpoint", action="store_true", help="use gradient 
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-supervised pretrained weights")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
 parser.add_argument("--squared_dice", action="store_true", help="use squared Dice")
-parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 
+parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 
 def main():
@@ -232,13 +233,16 @@ def main_worker(gpu, args):
             scheduler.step(epoch=start_epoch)
     else:
         scheduler = None
-    # print("Lodaer test")
-    # for i in loader[0]:
-    #     # print(i)
-    #     print(type(i))
-    #     break
-    # print("Pass Test")
-    # print(args)
+    print("Lodaer test")
+    for i in loader[0]:
+        print(i['image'].shape)
+        print(i['label'].shape)
+        print(i['inklabels'].shape)
+        print(torch.unique(i['image']))
+        print(torch.unique(i['label']))
+        print(torch.unique(i['inklabels']))
+    print("Pass Test")
+    print(args)
     accuracy = run_training(
         model=model,
         train_loader=loader[0],

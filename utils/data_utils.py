@@ -157,11 +157,11 @@ def get_loader(args):
             transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
             transforms.RandCropByPosNegLabeld(
                 keys=["image", "label", 'inklabels'],
-                label_key="label",
+                label_key="inklabels",
                 spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                 pos=1,
                 neg=1,
-                num_samples=1,
+                num_samples=2,
                 image_key="image",
                 image_threshold=0,
                 allow_smaller=False,
@@ -210,19 +210,13 @@ def get_loader(args):
     )
 
     if args.test_mode:
-        test_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
-        test_ds = data.Dataset(data=test_files, transform=test_transform)
-        test_sampler = Sampler(test_ds, shuffle=False) if args.distributed else None
-        test_loader = data.DataLoader(
-            test_ds,
-            batch_size=1,
-            shuffle=False,
-            num_workers=args.workers,
-            sampler=test_sampler,
-            pin_memory=True,
-            persistent_workers=True,
+        val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)
+        val_ds = data.Dataset(data=val_files, transform=val_transform)
+        val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
+        val_loader = data.DataLoader(
+            val_ds, batch_size=8, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
         )
-        loader = test_loader
+        loader = val_loader
     else:
         datalist = load_decathlon_datalist(datalist_json, True, "training", base_dir=data_dir)
         if args.use_normal_dataset:
@@ -244,7 +238,7 @@ def get_loader(args):
         val_ds = data.Dataset(data=val_files, transform=val_transform)
         val_sampler = Sampler(val_ds, shuffle=False) if args.distributed else None
         val_loader = data.DataLoader(
-            val_ds, batch_size=1, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
+            val_ds, batch_size=8, shuffle=False, num_workers=args.workers, sampler=val_sampler, pin_memory=True
         )
         loader = [train_loader, val_loader]
 

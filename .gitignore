@@ -7,3 +7,6 @@ runs/
 .vscode/
 .ipynb_checkpoints/
 __pycache__*
+nohup.out
+outputs/*
+pretrained_models/*
