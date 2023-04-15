@@ -18,79 +18,8 @@ import torch
 from monai import data, transforms
 from monai.data import load_decathlon_datalist
 
-from monai.transforms.transform import Transform
-from monai.transforms.transform import MapTransform
-from monai.config import KeysCollection
-from typing import Dict, Hashable, Mapping
-from monai.config.type_definitions import NdarrayOrTensor
+from utils.my_transform import *
 
-class Drop1Layer(Transform):
-    def __init__(self):
-        pass
-    
-    def __call__(self, data):
-        data_shape = data.shape
-        if len(data_shape) == 3:
-            y,_,_ = data_shape
-            ret = data[:y-1, :, :]
-        elif len(data_shape) == 4:
-            _,y,_,_ = data_shape
-            ret = data[:, :y-1, :, :]
-        else:
-            raise Exception("Input demention error")
-        return ret
-    
-class Drop1Layerd(MapTransform):
-    """
-    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
-    """
-    def __init__(self, keys: KeysCollection) -> None:
-        """
-        Args:
-            keys: keys of the corresponding items to be transformed.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            allow_missing_keys: don't raise exception if key is missing.
-        """
-        super().__init__(keys, )
-        self.adder = Drop1Layer()
-
-    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
-        d = dict(data)
-        for key in self.key_iterator(d):
-            d[key] = self.adder(d[key])
-        return d
-    
-class Copy(Transform):
-    def __init__(self, num_channel, add_channel=False):
-        self.num_channel = num_channel
-        self.add_channel = add_channel
-
-    def __call__(self, data):
-        if self.add_channel:
-            data = data.repeat(1, self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
-        else:
-            data = data.repeat(self.num_channel, 1, 1)  # output = (batch_size=1, num_channel, H, W)
-        return data
-    
-class Copyd(MapTransform):
-    """
-    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
-    """
-    def __init__(self, keys: KeysCollection, num_channel, add_channel=False) -> None:
-        """
-        Args:
-            keys: keys of the corresponding items to be transformed.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            allow_missing_keys: don't raise exception if key is missing.
-        """
-        super().__init__(keys, )
-        self.adder = Copy(num_channel, add_channel)
-
-    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
-        d = dict(data)
-        for key in self.key_iterator(d):
-            d[key] = self.adder(d[key])
-        return d
 
 class Sampler(torch.utils.data.Sampler):
     def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, make_even=True):
@@ -142,72 +71,156 @@ class Sampler(torch.utils.data.Sampler):
 def get_loader(args):
     data_dir = args.data_dir
     datalist_json = os.path.join(data_dir, args.json_list)
-    train_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
-            transforms.AddChanneld(keys=["image"]),
-            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel, add_channel=True), 
-            transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
-            # transforms.Spacingd(
-            #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
-            # ),
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            ),
-            transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
-            transforms.RandCropByPosNegLabeld(
-                keys=["image", "label", 'inklabels'],
-                label_key="inklabels",
-                spatial_size=(args.roi_x, args.roi_y, args.roi_z),
-                pos=1,
-                neg=1,
-                num_samples=2,
-                image_key="image",
-                image_threshold=0,
-                allow_smaller=False,
-            ),
+    if not args.model2d:
+        train_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                transforms.AddChanneld(keys=["image"]),
+                Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel, add_channel=True), 
+                change_channeld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                Drop1Layerd(keys=["image", "label", 'inklabels']),
+                printShaped(keys=["image", "label", 'inklabels']),
+                transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
+                transforms.RandCropByPosNegLabeld(
+                    keys=["image", "label", 'inklabels'],
+                    label_key="inklabels",
+                    spatial_size=(args.roi_x, args.roi_y, args.roi_z),
+                    pos=1,
+                    neg=1,
+                    num_samples=8,
+                    image_key="image",
+                    image_threshold=0,
+                    allow_smaller=False,
+                ),
 
-            transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=0),
-            transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=1),
-            transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=2),
-            transforms.RandRotate90d(keys=["image", 'inklabels'], prob=args.RandRotate90d_prob, max_k=3),
-            transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
-            transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
-            transforms.ToTensord(keys=["image", 'inklabels']),
-        ]
-    )
-    val_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
-            Copyd(keys=["label", 'inklabels'], num_channel=65), 
-            # transforms.GridSplitd(keys=["image", 'inklabels'], grid=(10,10)),
-            transforms.AddChanneld(keys=["image", "label", 'inklabels']),
-            transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
-            Drop1Layerd(keys=["image", 'inklabels']),
-            # transforms.Spacingd(
-            #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
-            # ),
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=0.0, a_max=65535.0, b_min=0.0, b_max=1.0, clip=True
-            ),
-            transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
-            transforms.ToTensord(keys=["image", 'inklabels']),
-        ]
-    )
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=0),
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=1),
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=2),
+                transforms.RandRotate90d(keys=["image", 'inklabels'], prob=args.RandRotate90d_prob, max_k=3),
+                transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+                transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
+        val_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                Copyd(keys=["label", 'inklabels'], num_channel=65), 
+                # transforms.GridSplitd(keys=["image", 'inklabels'], grid=(10,10)),
+                transforms.AddChanneld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                change_channeld(keys=["image", "label", 'inklabels']),
+                Drop1Layerd(keys=["image", "label", 'inklabels']),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
 
-    test_transform = transforms.Compose(
-        [
-            transforms.LoadImaged(keys=["image", "label"], reader="NumpyReader"),
-            transforms.AddChanneld(keys=["image"]),
-            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
-            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
-            # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
-            transforms.ScaleIntensityRanged(
-                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
-            ),
-            transforms.ToTensord(keys=["image"]),
-        ]
-    )
+        test_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label"], reader="NumpyReader"),
+                transforms.AddChanneld(keys=["image"]),
+                Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
+                # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+                change_channeld(keys=["image", "label", 'inklabels']),
+                transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.ToTensord(keys=["image"]),
+            ]
+        )
+    else:
+        train_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                transforms.AddChanneld(keys=["image"]),
+                Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel, add_channel=True), 
+                change_channeld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                # Drop1Layerd(keys=["image", "label", 'inklabels']),
+                transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
+                # printShaped(keys=["image", "label", 'inklabels']),
+                transforms.RandCropByPosNegLabeld(
+                    keys=["image", "label", 'inklabels'],
+                    label_key="inklabels",
+                    spatial_size=(args.roi_x, args.roi_y, args.roi_z),
+                    pos=1,
+                    neg=1,
+                    num_samples=1,
+                    image_key="image",
+                    image_threshold=0,
+                    allow_smaller=False,
+                ),
+                # printShaped(keys=["image", "label", 'inklabels']),
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=0),
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=1),
+                transforms.RandFlipd(keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=2),
+                transforms.RandRotate90d(keys=["image", 'inklabels'], prob=args.RandRotate90d_prob, max_k=3),
+                transforms.RandScaleIntensityd(keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+                transforms.RandShiftIntensityd(keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+                change_channeld(keys=["image", "label", 'inklabels'], back=True),
+                # printShaped(keys=["image", "label", 'inklabels']),
+                remove_channeld(keys=["image", "label", 'inklabels']),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
+        val_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
+                # transforms.GridSplitd(keys=["image", 'inklabels'], grid=(10,10)),
+                transforms.AddChanneld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                change_channeld(keys=["image", "label", 'inklabels']),
+                # Drop1Layerd(keys=["image", "label", 'inklabels']),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
+                change_channeld(keys=["image", "label", 'inklabels'], back=True),
+                remove_channeld(keys=["image", "label", 'inklabels']),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
+
+        test_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(keys=["image", "label"], reader="NumpyReader"),
+                # transforms.AddChanneld(keys=["image"]),
+                Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
+                # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+                # change_channeld(keys=["image", "label", 'inklabels']),
+                transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.ToTensord(keys=["image"]),
+            ]
+        )
+        
 
     if args.test_mode:
         val_files = load_decathlon_datalist(datalist_json, True, "validation", base_dir=data_dir)

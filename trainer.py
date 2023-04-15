@@ -34,17 +34,17 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         else:
             data, target = batch_data["image"], batch_data["inklabels"]
         data, target = data.cuda(args.rank), target.cuda(args.rank)
-        
-        if data[0].size() != (1, 64, 64, 64):
-            print("data error skip!")
-            continue
+
         
         for param in model.parameters():
             param.grad = None
         with autocast(enabled=args.amp):
             logits = model(data)
             # print(logits.shape, data.shape, target.shape)
-            loss = loss_func(logits, target[:, :, 0:1, :, :])
+            if args.model2d:
+                loss = loss_func(logits, target[ :, 0:1, :, :])
+            else:
+                loss = loss_func(logits, target[:, :, :, :, 0:1])
         if args.amp:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -81,7 +81,10 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            data, target = data.cuda(args.rank), target[:, :, 0:1, :, :].cuda(args.rank)
+            if not args.model2d:
+                data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
+            else:
+                data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
             # print(data.shape, target.shape)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:

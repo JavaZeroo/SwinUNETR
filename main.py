@@ -30,7 +30,7 @@ from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
-from utils.myModel import MyModel
+from utils.myModel import MyModel, MyModel2d
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -62,21 +62,21 @@ parser.add_argument("--rank", default=0, type=int, help="node rank for distribut
 parser.add_argument("--dist-url", default="tcp://127.0.0.1:23456", type=str, help="distributed url")
 parser.add_argument("--dist-backend", default="nccl", type=str, help="distributed backend")
 parser.add_argument("--norm_name", default="instance", type=str, help="normalization name")
-parser.add_argument("--workers", default=8, type=int, help="number of workers")
+parser.add_argument("--workers", default=0, type=int, help="number of workers")
 parser.add_argument("--feature_size", default=48, type=int, help="feature size")
-parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
+parser.add_argument("--in_channels", default=65, type=int, help="number of input channels")
 parser.add_argument("--out_channels", default=1, type=int, help="number of output channels")
 parser.add_argument("--use_normal_dataset", action="store_true", help="use monai Dataset class")
 parser.add_argument("--a_min", default=0.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
-parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
+parser.add_argument("--b_max", default=255.0, type=float, help="b_max in ScaleIntensityRanged")
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=64, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=64, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=64, type=int, help="roi size in z direction")
+parser.add_argument("--roi_x", default=256, type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=256, type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=65, type=int, help="roi size in z direction")
 parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
 parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
 parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
@@ -96,6 +96,8 @@ parser.add_argument("--squared_dice", action="store_true", help="use squared Dic
 
 parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
+parser.add_argument("--model2d", action="store_true", help="2dmode")
+
 
 def main():
     args = parser.parse_args()
@@ -131,9 +133,14 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_dir = args.pretrained_dir
-    model = MyModel()
+    if not args.model2d:
+        model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
+    else:
+        model = MyModel2d(img_size=(args.roi_x,args.roi_y))
 
     if args.resume_ckpt:
+        if args.model2d:
+            raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         model.load_swin_ckpt(model_dict)
         print("Use pretrained weights")
@@ -161,7 +168,7 @@ def main_worker(gpu, args):
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
     if args.focalLoss:
-        loss = FocalLoss()
+        loss = FocalLoss(weight=[10.0])
     elif args.squared_dice:
         loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     else:
@@ -172,17 +179,31 @@ def main_worker(gpu, args):
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
-    model_inferer = partial(
-        sliding_window_inference,
-        roi_size = (64,64,64),
-        sw_batch_size = 8,
-        predictor = model,
-        overlap = 0,
-        progress = True,
-        padding_mode = "reflect", 
-        device = "cpu", 
-        sw_device = "cuda"
-    )
+    if not args.model2d:
+        model_inferer = partial(
+            sliding_window_inference,
+            roi_size = (args.roi_x,args.roi_y,args.roi_z),
+            sw_batch_size = 8,
+            predictor = model,
+            overlap = 0,
+            progress = True,
+            padding_mode = "reflect", 
+            device = "cpu", 
+            sw_device = "cuda"
+        )
+    else:
+        model_inferer = partial(
+            sliding_window_inference,
+            roi_size = (args.roi_x,args.roi_y),
+            sw_batch_size = 8,
+            predictor = model,
+            overlap = 0,
+            progress = True,
+            padding_mode = "reflect", 
+            device = "cpu", 
+            sw_device = "cuda"
+        )
+        
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("Total parameters count", pytorch_total_params)
@@ -241,6 +262,7 @@ def main_worker(gpu, args):
         print(torch.unique(i['image']))
         print(torch.unique(i['label']))
         print(torch.unique(i['inklabels']))
+        break
     print("Pass Test")
     print(args)
     accuracy = run_training(

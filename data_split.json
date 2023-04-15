@@ -53,15 +53,75 @@
             "label":"mask_6.npy", 
             "ir":"ir_6.npy",
             "inklabels":"inklabels_6.npy"
-        }
-        
-    ],
-    "validation":[
+        },
         {
             "image":"surface_volume_10.npy",
             "label":"mask_10.npy", 
             "ir":"ir_10.npy",
             "inklabels":"inklabels_10.npy"
+        },
+        {
+            "image":"surface_volume_11.npy",
+            "label":"mask_11.npy", 
+            "ir":"ir_11.npy",
+            "inklabels":"inklabels_11.npy"
+        },
+        {
+            "image":"surface_volume_12.npy",
+            "label":"mask_12.npy", 
+            "ir":"ir_12.npy",
+            "inklabels":"inklabels_12.npy"
+        },
+        {
+            "image":"surface_volume_13.npy",
+            "label":"mask_13.npy", 
+            "ir":"ir_13.npy",
+            "inklabels":"inklabels_13.npy"
+        },
+        {
+            "image":"surface_volume_14.npy",
+            "label":"mask_14.npy", 
+            "ir":"ir_14.npy",
+            "inklabels":"inklabels_14.npy"
+        },
+        {
+            "image":"surface_volume_15.npy",
+            "label":"mask_15.npy", 
+            "ir":"ir_15.npy",
+            "inklabels":"inklabels_15.npy"
+        },
+        {
+            "image":"surface_volume_16.npy",
+            "label":"mask_16.npy", 
+            "ir":"ir_16.npy",
+            "inklabels":"inklabels_16.npy"
+        },
+        {
+            "image":"surface_volume_17.npy",
+            "label":"mask_17.npy", 
+            "ir":"ir_17.npy",
+            "inklabels":"inklabels_17.npy"
+        },
+        {
+            "image":"surface_volume_18.npy",
+            "label":"mask_18.npy", 
+            "ir":"ir_18.npy",
+            "inklabels":"inklabels_18.npy"
+        },
+        {
+            "image":"surface_volume_19.npy",
+            "label":"mask_19.npy", 
+            "ir":"ir_19.npy",
+            "inklabels":"inklabels_19.npy"
+        }
+        
+    ],
+    "validation":[
+        {
+            "image":"surface_volume_20.npy",
+            "label":"mask_20.npy", 
+            "ir":"ir_20.npy",
+            "inklabels":"inklabels_20.npy"
         }
     ],
     "testing":[
