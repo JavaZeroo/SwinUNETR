@@ -16,20 +16,20 @@ from monai.networks.nets import SwinUNETR
 import torch
 import torch.nn as nn
 from monai.losses import DiceCELoss
-from utils.myModel import MyModel2d
+from utils.myModel import MyModel
 
 print(monai.__version__)
-torch.cuda.set_device(0)
+# torch.cuda.set_device(0)
 
 # (batch_size, in_channel, H, W, D)
 data = torch.ones(7, 65, 384, 384)
 
-model = MyModel2d().cuda(0)
+model = MyModel()
 
 model.eval()
 
 torch.cuda.empty_cache()
 
-pred = model(data.cuda(0))
+pred = model(data)
 
 print(pred.size())

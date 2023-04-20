@@ -171,3 +171,42 @@ class Copyd(MapTransform):
         for key in self.key_iterator(d):
             d[key] = self.adder(d[key])
         return d
+    
+
+class CustomPad(Transform):
+    def __init__(self, target_shape=(96, None, None)):
+        self.target_shape = target_shape
+
+    def __call__(self, data):
+        if data.shape[0] == self.target_shape[0]:
+            return data
+
+        pad_size = max(0, self.target_shape[0] - data.shape[0])
+        pad_size_before = pad_size // 2
+        pad_size_after = pad_size - pad_size_before
+
+        padded_data = torch.cat((torch.flip(data[:pad_size_before], dims=(0,)), 
+                                 data, 
+                                 torch.flip(data[-pad_size_after:], dims=(0,))), dim=0)
+        return padded_data
+    
+class CustomPadd(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
+    """
+    def __init__(self, keys: KeysCollection) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+        """
+        super().__init__(keys, )
+        self.adder = CustomPad()
+        pass
+    
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.adder(d[key])
+        return d
