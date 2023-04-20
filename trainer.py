@@ -42,11 +42,14 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             logits = model(data)
             # print(logits.shape, data.shape, target.shape)
             if args.model_mode == "2dswin":
-                print(logits.device, target.device)
                 logits, target = logits.cuda(0), target.cuda(0)
-                print(logits.device, target.device)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
             elif args.model_mode == "3dswin":
+                loss = loss_func(logits, target[:, :, :, :, 0:1])
+            elif args.model_mode == "3dunet":
+                if args.debug:
+                    print(logits.shape, target[:, :, :, :, 0:1].shape)
+                    print(logits.device, target[:, :, :, :, 0:1].device)
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
@@ -90,6 +93,10 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
             elif args.model_mode == "2dswin":
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
+            elif args.model_mode == "3dunet":
+                data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
+                if args.debug:
+                    print(data, target)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
             # print(data.shape, target.shape)

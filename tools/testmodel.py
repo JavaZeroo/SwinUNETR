@@ -16,15 +16,15 @@ from monai.networks.nets import SwinUNETR
 import torch
 import torch.nn as nn
 from monai.losses import DiceCELoss
-from utils.myModel import MyModel
+from utils.myModel import MyModel, MyModel3dunet
 
 print(monai.__version__)
 # torch.cuda.set_device(0)
 
 # (batch_size, in_channel, H, W, D)
-data = torch.ones(7, 65, 384, 384)
+data = torch.ones(8, 1, 512, 512, 64)
 
-model = MyModel()
+model = MyModel3dunet()
 
 model.eval()
 

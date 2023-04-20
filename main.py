@@ -31,6 +31,7 @@ from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
 from utils.myModel import MyModel, MyModel2d, MyModel3dunet
+from utils.my_loss import CustomWeightedDiceCELoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -92,16 +93,21 @@ parser.add_argument("--smooth_nr", default=0.0, type=float, help="constant added
 parser.add_argument("--use_checkpoint", action="store_true", help="use gradient checkpointing to save memory")
 parser.add_argument("--use_ssl_pretrained", action="store_true", help="use self-supervised pretrained weights")
 parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimension of input data")
-parser.add_argument("--squared_dice", action="store_true", help="use squared Dice")
+# parser.add_argument("--squared_dice", action="store_true", help="use squared Dice")
 
-parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
+# parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
+parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
 parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
+parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
+parser.add_argument("--debug", action="store_true", help="debug mode")
 
+parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
 
 def main():
     args = parser.parse_args()
     args.amp = not args.noamp
+    args.use_normal_dataset = args.normal if args.normal else args.use_normal_dataset
     args.logdir = "./runs/" + args.logdir
     if args.distributed:
         args.ngpus_per_node = torch.cuda.device_count()
@@ -138,7 +144,7 @@ def main_worker(gpu, args):
     elif args.model_mode == "2dswin":
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
     elif args.model_mode == "3dunet":
-        model = MyModel3dunet(img_size=(args.roi_x,args.roi_y,args.roi_y))
+        model = MyModel3dunet()
     else:
         raise ValueError("model mode error")
 
@@ -178,12 +184,14 @@ def main_worker(gpu, args):
         except ValueError:
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
-    if args.focalLoss:
+    if args.loss_mode == 'focalLoss':
         loss = FocalLoss(weight=[10.0])
-    elif args.squared_dice:
+    elif args.loss_mode == 'squared_dice':
         loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
-    else:
+    elif args.loss_mode == 'DiceCELoss':
         loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
+    elif args.loss_mode == 'custom':
+        loss = CustomWeightedDiceCELoss()
         
     
     post_label = AsDiscrete(to_onehot=args.out_channels)

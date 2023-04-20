@@ -64,7 +64,9 @@ class MyModel3dunet(nn.Module):
             strides=(2, 2, 2, 2),
             num_res_units=2,
         )
+        self.conv1 = Convolution(spatial_dims=3, in_channels=1, out_channels=1, kernel_size=(1, 1, 64), strides=1, padding=0, act="sigmoid")
     
     def forward(self, x):
         x_out = self.unet(x)
+        x_out = self.conv1(x_out)
         return x_out

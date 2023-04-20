@@ -115,7 +115,93 @@ def get_transforms(args):
                     spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                     pos=1,
                     neg=1,
-                    num_samples=8,
+                    num_samples=args.num_samples,
+                    image_key="image",
+                    image_threshold=0,
+                    allow_smaller=False,
+                ),
+
+                transforms.RandFlipd(
+                    keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=0),
+                transforms.RandFlipd(
+                    keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=1),
+                transforms.RandFlipd(
+                    keys=["image", 'inklabels'], prob=args.RandFlipd_prob, spatial_axis=2),
+                transforms.RandRotate90d(
+                    keys=["image", 'inklabels'], prob=args.RandRotate90d_prob, max_k=3),
+                transforms.RandScaleIntensityd(
+                    keys="image", factors=0.1, prob=args.RandScaleIntensityd_prob),
+                transforms.RandShiftIntensityd(
+                    keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
+        val_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(
+                    keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                Copyd(keys=["label", 'inklabels'], num_channel=65),
+                # transforms.GridSplitd(keys=["image", 'inklabels'], grid=(10,10)),
+                transforms.AddChanneld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(
+                    keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                change_channeld(keys=["image", "label", 'inklabels']),
+                Drop1Layerd(keys=["image", "label", 'inklabels']),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                transforms.CropForegroundd(
+                    keys=["image", "label", 'inklabels'], source_key="image"),
+                transforms.ToTensord(keys=["image", 'inklabels']),
+            ]
+        )
+        test_transform = transforms.Compose(
+        [
+            transforms.LoadImaged(
+                keys=["image", "label"], reader="NumpyReader"),
+            transforms.AddChanneld(keys=["image"]),
+            Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel),
+            # transforms.Orientationd(keys=["image"], axcodes="RAS"),
+            change_channeld(keys=["image", "label", 'inklabels']),
+            transforms.Spacingd(keys="image", pixdim=(
+                args.space_x, args.space_y, args.space_z), mode="bilinear"),
+            transforms.ScaleIntensityRanged(
+                keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+            ),
+            transforms.ToTensord(keys=["image"]),
+        ]
+    )
+    elif args.model_mode == "3dunet":
+        train_transform = transforms.Compose(
+            [
+                transforms.LoadImaged(
+                    keys=["image", "label", 'inklabels'], reader="NumpyReader"),
+                transforms.AddChanneld(keys=["image"]),
+                Copyd(keys=["label", 'inklabels'],
+                    num_channel=args.num_channel, add_channel=True),
+                change_channeld(keys=["image", "label", 'inklabels']),
+                transforms.Orientationd(
+                    keys=["image", "label", 'inklabels'], axcodes="RAS"),
+                transforms.Spacingd(
+                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                ),
+                transforms.ScaleIntensityRanged(
+                    keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
+                ),
+                Drop1Layerd(keys=["image", "label", 'inklabels']),
+                printShaped(keys=["image", "label", 'inklabels']),
+                transforms.CropForegroundd(
+                    keys=["image", "label", 'inklabels'], source_key="image"),
+                transforms.RandCropByPosNegLabeld(
+                    keys=["image", "label", 'inklabels'],
+                    label_key="inklabels",
+                    spatial_size=(args.roi_x, args.roi_y, args.roi_z),
+                    pos=1,
+                    neg=1,
+                    num_samples=args.num_samples,
                     image_key="image",
                     image_threshold=0,
                     allow_smaller=False,
@@ -200,7 +286,7 @@ def get_transforms(args):
                     spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                     pos=1,
                     neg=1,
-                    num_samples=32,
+                    num_samples=args.num_samples,
                     image_key="image",
                     image_threshold=0,
                     allow_smaller=False,
