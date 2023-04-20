@@ -199,11 +199,15 @@ for i in range(len(datalist)):
 
     model.eval()
     model_inferer = partial(
-    sliding_window_inference,
-    roi_size=(64,64,64),
-    sw_batch_size=4,
-    predictor=model,
-    overlap=0.5,
+        sliding_window_inference,
+        roi_size = (256,256),
+        sw_batch_size = 8,
+        predictor = model,
+        overlap = 0,
+        progress = True,
+        padding_mode = "reflect", 
+        device = "cpu", 
+        sw_device = "cuda"
     )
     with torch.no_grad():
         img, target = batch_data["image"], batch_data["inklabels"]

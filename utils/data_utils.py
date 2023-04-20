@@ -151,14 +151,14 @@ def get_loader(args):
                 Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel, add_channel=True), 
                 change_channeld(keys=["image", "label", 'inklabels']),
                 transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
-                transforms.Spacingd(
-                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
-                ),
+                # transforms.Spacingd(
+                #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                # ),
                 transforms.ScaleIntensityRanged(
                     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
                 ),
                 # Drop1Layerd(keys=["image", "label", 'inklabels']),
-                transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
+                # transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
                 # printShaped(keys=["image", "label", 'inklabels']),
                 transforms.RandCropByPosNegLabeld(
                     keys=["image", "label", 'inklabels'],
@@ -166,7 +166,7 @@ def get_loader(args):
                     spatial_size=(args.roi_x, args.roi_y, args.roi_z),
                     pos=1,
                     neg=1,
-                    num_samples=1,
+                    num_samples=32,
                     image_key="image",
                     image_threshold=0,
                     allow_smaller=False,
@@ -193,9 +193,9 @@ def get_loader(args):
                 transforms.Orientationd(keys=["image", "label", 'inklabels'], axcodes="RAS"),
                 change_channeld(keys=["image", "label", 'inklabels']),
                 # Drop1Layerd(keys=["image", "label", 'inklabels']),
-                transforms.Spacingd(
-                    keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
-                ),
+                # transforms.Spacingd(
+                #     keys=["image", "label", 'inklabels'], pixdim=(args.space_x, args.space_y, args.space_z), mode=("bilinear", "nearest", "nearest")
+                # ),
                 transforms.ScaleIntensityRanged(
                     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
                 ),
@@ -213,7 +213,7 @@ def get_loader(args):
                 Copyd(keys=["label", 'inklabels'], num_channel=args.num_channel), 
                 # transforms.Orientationd(keys=["image"], axcodes="RAS"),
                 # change_channeld(keys=["image", "label", 'inklabels']),
-                transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
+                # transforms.Spacingd(keys="image", pixdim=(args.space_x, args.space_y, args.space_z), mode="bilinear"),
                 transforms.ScaleIntensityRanged(
                     keys=["image"], a_min=args.a_min, a_max=args.a_max, b_min=args.b_min, b_max=args.b_max, clip=True
                 ),
@@ -236,7 +236,7 @@ def get_loader(args):
             train_ds = data.Dataset(data=datalist, transform=train_transform)
         else:
             train_ds = data.SmartCacheDataset(
-                data=datalist, transform=train_transform, cache_rate=0.5, num_init_workers=args.workers
+                data=datalist, transform=train_transform, cache_rate=0.2, num_init_workers=args.workers
             )
         train_sampler = Sampler(train_ds) if args.distributed else None
         train_loader = data.DataLoader(

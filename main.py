@@ -74,8 +74,8 @@ parser.add_argument("--b_max", default=255.0, type=float, help="b_max in ScaleIn
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=256, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=256, type=int, help="roi size in y direction")
+parser.add_argument("--roi_x", default=512, type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=512, type=int, help="roi size in y direction")
 parser.add_argument("--roi_z", default=65, type=int, help="roi size in z direction")
 parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
 parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
@@ -139,10 +139,13 @@ def main_worker(gpu, args):
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
 
     if args.resume_ckpt:
-        if args.model2d:
-            raise ValueError("2d model can not resume from ckpt")
+            
+            # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        model.load_swin_ckpt(model_dict)
+        if args.model2d:
+            model.load_state_dict(model_dict)
+        else:
+            model.load_swin_ckpt(model_dict)
         print("Use pretrained weights")
 
     if args.use_ssl_pretrained:
@@ -172,7 +175,7 @@ def main_worker(gpu, args):
     elif args.squared_dice:
         loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     else:
-        loss = DiceCELoss(include_background=False, sigmoid=True) # Normally
+        loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
         
     
     post_label = AsDiscrete(to_onehot=args.out_channels)
@@ -225,7 +228,7 @@ def main_worker(gpu, args):
             best_acc = checkpoint["best_acc"]
         print("=> loaded checkpoint '{}' (epoch {}) (bestacc {})".format(args.checkpoint, start_epoch, best_acc))
 
-    model.cuda(args.gpu)
+    model.cuda(0)
 
     if args.distributed:
         torch.cuda.set_device(args.gpu)

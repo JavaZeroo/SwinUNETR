@@ -21,6 +21,13 @@ def resample_3d(img, target_size):
     img_resampled = ndimage.zoom(img, zoom_ratio, order=0, prefilter=False)
     return img_resampled
 
+def resample_2d(img, target_size):
+    imx, imy = img.shape
+    tx, ty = target_size
+    zoom_ratio = (float(tx) / float(imx), float(ty) / float(imy))
+    img_resampled = ndimage.zoom(img, zoom_ratio, order=0, prefilter=False)
+    return img_resampled
+
 
 def dice(x, y):
     intersect = np.sum(np.sum(np.sum(x * y)))

@@ -42,6 +42,9 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             logits = model(data)
             # print(logits.shape, data.shape, target.shape)
             if args.model2d:
+                print(logits.device, target.device)
+                logits, target = logits.cuda(0), target.cuda(0)
+                print(logits.device, target.device)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
             else:
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
@@ -101,15 +104,6 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
             acc_func(y_pred=val_outputs_list, y=val_labels_list)
             acc, not_nans = acc_func.aggregate()
             acc = acc.cuda(args.rank)
-
-            # if args.distributed:
-            #     acc_list, not_nans_list = distributed_all_gather(
-            #         [acc, not_nans], out_numpy=True, is_valid=idx < loader.sampler.valid_length
-            #     )
-            #     for al, nl in zip(acc_list, not_nans_list):
-            #         run_acc.update(al, n=nl)
-
-            # else:
             run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
 
             if args.rank == 0:
@@ -174,7 +168,7 @@ def run_training(
                 "loss: {:.4f}".format(train_loss),
                 "time {:.2f}s".format(time.time() - epoch_time),
             )
-        if args.rank == 0 and writer is not None:
+        if args.rank == 0 and writer is not None and epoch % 10 == 0:
             writer.add_scalar("train_loss", train_loss, epoch)
         b_new_best = False
         if (epoch + 1) % args.val_every == 0:

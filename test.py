@@ -16,12 +16,12 @@ import nibabel as nib
 import numpy as np
 import torch
 from utils.data_utils import get_loader
-from utils.utils import dice, resample_3d
+from utils.utils import dice, resample_3d, resample_2d
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
 
-from utils.myModel import MyModel
+from utils.myModel import MyModel,MyModel2d
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -65,9 +65,9 @@ parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleInte
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
-parser.add_argument("--roi_x", default=64, type=int, help="roi size in x direction")
-parser.add_argument("--roi_y", default=64, type=int, help="roi size in y direction")
-parser.add_argument("--roi_z", default=64, type=int, help="roi size in z direction")
+parser.add_argument("--roi_x", default=256, type=int, help="roi size in x direction")
+parser.add_argument("--roi_y", default=256, type=int, help="roi size in y direction")
+parser.add_argument("--roi_z", default=65, type=int, help="roi size in z direction")
 parser.add_argument("--dropout_rate", default=0.0, type=float, help="dropout rate")
 parser.add_argument("--dropout_path_rate", default=0.0, type=float, help="drop path rate")
 parser.add_argument("--RandFlipd_prob", default=0.2, type=float, help="RandFlipd aug probability")
@@ -87,8 +87,8 @@ parser.add_argument("--squared_dice", action="store_true", help="use squared Dic
 
 parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
-parser.add_argument("--exp_name", default="test1", type=str, help="experiment name")
-
+parser.add_argument("--exp_name", default="test2", type=str, help="experiment name")
+parser.add_argument("--model2d", action="store_true", help="2dmode")
 
 
 def main():
@@ -102,7 +102,10 @@ def main():
     model_name = args.pretrained_model_name
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pretrained_pth = os.path.join(pretrained_dir, model_name)
-    model = MyModel()
+    if not args.model2d:
+        model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
+    else:
+        model = MyModel2d(img_size=(args.roi_x,args.roi_y))
     model_dict = torch.load(pretrained_pth)["state_dict"]
     model.load_state_dict(model_dict)
     model.eval()
@@ -113,28 +116,33 @@ def main():
         for i, batch in enumerate(val_loader):
             val_inputs, val_labels = (batch["image"].cuda(), batch["label"].cuda())
             print(type(val_labels))
-            _, _, h, w, d = val_labels.shape
-            target_shape = (h, w, d)
+            print(val_labels.shape)
+            _, d, h, w = val_labels.shape
+            target_shape = (h, w)
             img_name = batch["image_meta_dict"]["filename_or_obj"][0].split("/")[-1]
             print("Inference on case {}".format(img_name))
             val_outputs = sliding_window_inference(
                 val_inputs, 
-                (64, 64, 64), 
+                (256, 256), 
                 4, 
                 model, 
-                overlap=0, 
-                mode="gaussian", 
+                overlap = 0,
+                progress = True,
                 padding_mode = "reflect", 
                 device = "cpu", 
-                sw_device = "cuda", 
-                progress = True
+                sw_device = "cuda"
             )
+            print(val_outputs.shape)
             val_outputs = torch.softmax(val_outputs, 1).cpu()
             val_outputs = np.array(val_outputs)
             val_outputs = np.argmax(val_outputs, axis=1).astype(np.uint8)[0]
             val_labels = val_labels.cpu()
-            val_labels = np.array(val_labels)[0, 0, :, :, :]
-            val_outputs = resample_3d(val_outputs, target_shape)
+            val_labels = np.array(val_labels)[0, 0, :, :]
+            if args.model2d:
+                val_outputs = resample_2d(val_outputs, target_shape)
+            else:
+                val_outputs = resample_3d(val_outputs, target_shape)
+                
             dice_list_sub = []
             for i in [1]:
                 organ_Dice = dice(val_outputs == i, val_labels == i)
@@ -143,7 +151,7 @@ def main():
             print("Mean Organ Dice: {}".format(mean_dice))
             dice_list_case.append(mean_dice)
             np.save(
-                os.path.join(output_directory, img_name), val_outputs[0, :,:]
+                os.path.join(output_directory, img_name), val_outputs[:,:]
             )
 
         print("Overall Mean Dice: {}".format(np.mean(dice_list_case)))
