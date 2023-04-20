@@ -96,7 +96,7 @@ parser.add_argument("--squared_dice", action="store_true", help="use squared Dic
 
 parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
-parser.add_argument("--model2d", action="store_true", help="2dmode")
+parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
 
 
 def main():
@@ -133,19 +133,23 @@ def main_worker(gpu, args):
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
 
     pretrained_dir = args.pretrained_dir
-    if not args.model2d:
+    if args.model_mode == "3dswin":
         model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
-    else:
+    elif args.model_mode == "2dswin":
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
+    else:
+        raise ValueError("model mode error")
 
+    
     if args.resume_ckpt:
-            
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model2d:
+        if args.model_mode == "2dswin":
             model.load_state_dict(model_dict)
-        else:
+        elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
+        else:
+            raise ValueError("model mode error")
         print("Use pretrained weights")
 
     if args.use_ssl_pretrained:
@@ -182,7 +186,7 @@ def main_worker(gpu, args):
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
-    if not args.model2d:
+    if args.model_mode == "3dswin":
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y,args.roi_z),
@@ -194,7 +198,7 @@ def main_worker(gpu, args):
             device = "cpu", 
             sw_device = "cuda"
         )
-    else:
+    elif args.model_mode == "2dswin":
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y),
@@ -206,6 +210,8 @@ def main_worker(gpu, args):
             device = "cpu", 
             sw_device = "cuda"
         )
+    else:
+        raise ValueError("model mode error")
         
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

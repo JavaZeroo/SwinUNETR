@@ -41,13 +41,15 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         with autocast(enabled=args.amp):
             logits = model(data)
             # print(logits.shape, data.shape, target.shape)
-            if args.model2d:
+            if args.model_mode == "2dswin":
                 print(logits.device, target.device)
                 logits, target = logits.cuda(0), target.cuda(0)
                 print(logits.device, target.device)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
-            else:
+            elif args.model_mode == "3dswin":
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
+            else:
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
         if args.amp:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -84,10 +86,12 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            if not args.model2d:
+            if args.model_mode == "3dswin":
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
-            else:
+            elif args.model_mode == "2dswin":
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
+            else:
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
             # print(data.shape, target.shape)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:

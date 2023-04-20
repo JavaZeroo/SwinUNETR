@@ -88,7 +88,7 @@ parser.add_argument("--squared_dice", action="store_true", help="use squared Dic
 parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 parser.add_argument("--exp_name", default="test2", type=str, help="experiment name")
-parser.add_argument("--model2d", action="store_true", help="2dmode")
+parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
 
 
 def main():
@@ -102,10 +102,12 @@ def main():
     model_name = args.pretrained_model_name
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pretrained_pth = os.path.join(pretrained_dir, model_name)
-    if not args.model2d:
+    if args.model_mode == "3dswin":
         model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
-    else:
+    elif args.model_mode == "2dswin":
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
+    else:
+        raise ValueError("model mode error")
     model_dict = torch.load(pretrained_pth)["state_dict"]
     model.load_state_dict(model_dict)
     model.eval()
@@ -138,10 +140,12 @@ def main():
             val_outputs = np.argmax(val_outputs, axis=1).astype(np.uint8)[0]
             val_labels = val_labels.cpu()
             val_labels = np.array(val_labels)[0, 0, :, :]
-            if args.model2d:
+            if args.model_mode == "2dswin":
                 val_outputs = resample_2d(val_outputs, target_shape)
-            else:
+            elif args.model_mode == "3dswin":
                 val_outputs = resample_3d(val_outputs, target_shape)
+            else:
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
                 
             dice_list_sub = []
             for i in [1]:
