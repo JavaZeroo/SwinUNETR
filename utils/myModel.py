@@ -1,5 +1,5 @@
 import torch.nn as nn
-from monai.networks.nets import SwinUNETR
+from monai.networks.nets import SwinUNETR, UNet
 from monai.networks.blocks.convolutions import Convolution
 
 class MyModel(nn.Module):
@@ -52,3 +52,19 @@ class MyModel2d(nn.Module):
     def load_swin_ckpt(self, model_dict, strict: bool = True):
         self.swinUNETR.load_state_dict(model_dict, strict)
         pass
+    
+class MyModel3dunet(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.unet = UNet(
+            spatial_dims=3,
+            in_channels=1,
+            out_channels=1,
+            channels=(16, 32, 64, 128, 256),
+            strides=(2, 2, 2, 2),
+            num_res_units=2,
+        )
+    
+    def forward(self, x):
+        x_out = self.unet(x)
+        return x_out

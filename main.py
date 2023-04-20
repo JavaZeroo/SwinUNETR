@@ -30,7 +30,7 @@ from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
-from utils.myModel import MyModel, MyModel2d
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -137,6 +137,8 @@ def main_worker(gpu, args):
         model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
     elif args.model_mode == "2dswin":
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
+    elif args.model_mode == "3dunet":
+        model = MyModel3dunet(img_size=(args.roi_x,args.roi_y,args.roi_y))
     else:
         raise ValueError("model mode error")
 
