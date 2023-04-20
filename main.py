@@ -150,6 +150,8 @@ def main_worker(gpu, args):
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
+        elif args.model_mode == "3dunet":
+            model.load_state_dict(model_dict)
         else:
             raise ValueError("model mode error")
         print("Use pretrained weights")
@@ -204,6 +206,18 @@ def main_worker(gpu, args):
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y),
+            sw_batch_size = 8,
+            predictor = model,
+            overlap = 0,
+            progress = True,
+            padding_mode = "reflect", 
+            device = "cpu", 
+            sw_device = "cuda"
+        )
+    elif args.model_mode == "3dunet":
+        model_inferer = partial(
+            sliding_window_inference,
+            roi_size = (args.roi_x,args.roi_y,args.roi_z),
             sw_batch_size = 8,
             predictor = model,
             overlap = 0,
