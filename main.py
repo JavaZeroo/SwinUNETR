@@ -25,12 +25,12 @@ from utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss, FocalLoss
-from monai.metrics import DiceMetric, MeanIoU
+from monai.metrics import DiceMetric, MeanIoU, FBetaScore
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d
 from utils.my_loss import CustomWeightedDiceCELoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -48,7 +48,7 @@ parser.add_argument(
     help="pretrained model name",
 )
 parser.add_argument("--save_checkpoint", action="store_true", help="save checkpoint during training")
-parser.add_argument("--max_epochs", default=5000, type=int, help="max number of training epochs")
+parser.add_argument("--max_epochs", default=1000, type=int, help="max number of training epochs")
 parser.add_argument("--batch_size", default=1, type=int, help="number of batch size")
 parser.add_argument("--sw_batch_size", default=4, type=int, help="number of sliding window batch size")
 parser.add_argument("--optim_lr", default=1e-4, type=float, help="optimization learning rate")
@@ -98,6 +98,7 @@ parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimensi
 # parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
+parser.add_argument("--cache_rate", default=0.4, type=float, help="cache_rate")
 parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
 parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
 parser.add_argument("--debug", action="store_true", help="debug mode")
@@ -145,6 +146,8 @@ def main_worker(gpu, args):
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
     elif args.model_mode == "3dunet":
         model = MyModel3dunet()
+    elif args.model_mode == "2dfunet":
+        model = MyFlexibleUNet2d(args)
     else:
         raise ValueError("model mode error")
 
@@ -157,6 +160,8 @@ def main_worker(gpu, args):
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
         elif args.model_mode == "3dunet":
+            model.load_state_dict(model_dict)
+        elif args.model_mode == "2dfunet":
             model.load_state_dict(model_dict)
         else:
             raise ValueError("model mode error")
@@ -198,13 +203,14 @@ def main_worker(gpu, args):
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
+    f_beta_acc = FBetaScore()
     if args.model_mode == "3dswin":
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y,args.roi_z),
             sw_batch_size = 8,
             predictor = model,
-            overlap = 0,
+            overlap = 0.5,
             progress = True,
             padding_mode = "reflect", 
             device = "cpu", 
@@ -216,7 +222,7 @@ def main_worker(gpu, args):
             roi_size = (args.roi_x,args.roi_y),
             sw_batch_size = 8,
             predictor = model,
-            overlap = 0,
+            overlap = 0.5,
             progress = True,
             padding_mode = "reflect", 
             device = "cpu", 
@@ -228,12 +234,25 @@ def main_worker(gpu, args):
             roi_size = (args.roi_x,args.roi_y,args.roi_z),
             sw_batch_size = 8,
             predictor = model,
+            overlap = 0.5,
+            progress = True,
+            padding_mode = "reflect", 
+            device = "cpu", 
+            sw_device = "cuda"
+        )
+    elif args.model_mode == "2dfunet":
+        model_inferer = partial(
+            sliding_window_inference,
+            roi_size = (args.roi_x,args.roi_y),
+            sw_batch_size = 8,
+            predictor = model,
             overlap = 0,
             progress = True,
             padding_mode = "reflect", 
             device = "cpu", 
             sw_device = "cuda"
         )
+        
     else:
         raise ValueError("model mode error")
         

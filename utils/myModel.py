@@ -1,5 +1,5 @@
 import torch.nn as nn
-from monai.networks.nets import SwinUNETR, UNet
+from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet
 from monai.networks.blocks.convolutions import Convolution
 
 class MyModel(nn.Module):
@@ -70,3 +70,23 @@ class MyModel3dunet(nn.Module):
         x_out = self.unet(x)
         x_out = self.conv1(x_out)
         return x_out
+    
+
+class MyFlexibleUNet2d(nn.Module):
+    def __init__(self, args) -> None:
+        super().__init__()
+        self.flexibleUNet = FlexibleUNet(
+                in_channels=args.num_channel,
+                out_channels=1,
+                backbone="efficientnet-b0",
+                pretrained=True,
+                spatial_dims=2,
+                dropout=0.0,
+            )
+        self.sig = nn.Sigmoid()
+        
+    def forward(self, x):
+        x_out = self.flexibleUNet(x)
+        x_out = self.sig(x_out)
+        return x_out
+        

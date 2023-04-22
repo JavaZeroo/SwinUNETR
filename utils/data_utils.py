@@ -92,7 +92,7 @@ def get_loader(args):
             train_ds = data.Dataset(data=datalist, transform=train_transform)
         else:
             train_ds = data.SmartCacheDataset(
-                data=datalist, transform=train_transform, cache_rate=0.2, num_init_workers=args.workers
+                data=datalist, transform=train_transform, cache_rate=args.cache_rate, num_init_workers=args.workers
             )
         train_sampler = Sampler(train_ds) if args.distributed else None
         train_loader = data.DataLoader(

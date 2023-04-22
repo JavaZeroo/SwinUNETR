@@ -44,6 +44,9 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             if args.model_mode == "2dswin":
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
+            elif args.model_mode == "2dfunet":
+                logits, target = logits.cuda(0), target.cuda(0)
+                loss = loss_func(logits, target[ :, 0:1, :, :])
             elif args.model_mode == "3dswin":
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
             elif args.model_mode == "3dunet":
@@ -93,18 +96,22 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
             elif args.model_mode == "2dswin":
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
+            elif args.model_mode == "2dfunet":
+                data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
             elif args.model_mode == "3dunet":
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
-                if args.debug:
-                    print(data, target)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
-            # print(data.shape, target.shape)
+                # print(data, target)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:
                     logits = model_inferer(data)
                 else:
                     logits = model(data)
+            if args.debug:
+                print(logits.shape, target.shape)
+                torch.save(logits, "logits.pt")
+                torch.save(target, "target.pt")
             if not logits.is_cuda:
                 target = target.cpu()
             val_outputs_list = decollate_batch(logits)
@@ -218,10 +225,10 @@ def run_training(
                             model, epoch, args, best_acc=val_acc_max, optimizer=optimizer, scheduler=scheduler
                         )
             if args.rank == 0 and args.logdir is not None and args.save_checkpoint:
-                save_checkpoint(model, epoch, args, best_acc=val_acc_max, filename="model_final.pt")
+                save_checkpoint(model, epoch, args, best_acc=val_acc_max, filename=f"model_final_{str(epoch)}.pt")
                 if b_new_best:
                     print("Copying to model.pt new best model!!!!")
-                    shutil.copyfile(os.path.join(args.logdir, "model_final.pt"), os.path.join(args.logdir, "model.pt"))
+                    shutil.copyfile(os.path.join(args.logdir, f"model_final_{str(epoch)}.pt"), os.path.join(args.logdir, "model.pt"))
 
         if scheduler is not None:
             scheduler.step()

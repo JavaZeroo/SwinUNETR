@@ -76,19 +76,28 @@ class change_channeld(MapTransform):
             d[key] = self.adder(d[key])
         return d
     
-class printShape(Transform):
-    def __init__(self):
+class z_clip(Transform):
+    def __init__(self, num_channel=None):
+        if num_channel is None:
+            raise ValueError("num_channel is None")
+        self.num_channel = num_channel
         pass
     
     def __call__(self, data):
-        print(data.shape)
+        if self.num_channel == 65:
+            return data
+        mid = 65 // 2
+        start = mid - self.num_channel // 2
+        end = mid + self.num_channel // 2
+        if isinstance(data, torch.Tensor):
+            data = data[:, start:end, :, :]
         return data
     
-class printShaped(MapTransform):
+class z_clipd(MapTransform):
     """
     Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
     """
-    def __init__(self, keys: KeysCollection) -> None:
+    def __init__(self, keys: KeysCollection, num_channel=None) -> None:
         """
         Args:
             keys: keys of the corresponding items to be transformed.
@@ -96,9 +105,44 @@ class printShaped(MapTransform):
             allow_missing_keys: don't raise exception if key is missing.
         """
         super().__init__(keys, )
+
+        self.adder = z_clip(num_channel=num_channel)
         pass
     
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.key_iterator(d):
+            d[key] = self.adder(d[key])
+        return d
+    
+class printShape(Transform):
+    def __init__(self, debug=False):
+        self.debug=debug
+        pass
+    
+    def __call__(self, data):
+        if self.debug:
+            print(data.shape)
+        return data
+    
+class printShaped(MapTransform):
+    """
+    Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
+    """
+    def __init__(self, keys: KeysCollection, debug=False) -> None:
+        """
+        Args:
+            keys: keys of the corresponding items to be transformed.
+                See also: :py:class:`monai.transforms.compose.MapTransform`
+            allow_missing_keys: don't raise exception if key is missing.
+        """
+        super().__init__(keys)
+        self.debug=debug
+        pass
+    
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
+        if not self.debug:
+            return dict(data)
         d = dict(data)
         for key in self.key_iterator(d):
             print(d[key].shape)
