@@ -1,5 +1,5 @@
 import torch.nn as nn
-from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet
+from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet, AttentionUnet
 from monai.networks.blocks.convolutions import Convolution
 
 class MyModel(nn.Module):
@@ -78,7 +78,7 @@ class MyFlexibleUNet2d(nn.Module):
         self.flexibleUNet = FlexibleUNet(
                 in_channels=args.num_channel,
                 out_channels=1,
-                backbone="efficientnet-b0",
+                backbone=f"efficientnet-{args.eff}",
                 pretrained=True,
                 spatial_dims=2,
                 dropout=0.0,
@@ -90,3 +90,63 @@ class MyFlexibleUNet2d(nn.Module):
         x_out = self.sig(x_out)
         return x_out
         
+        
+
+class ConvLSTM(nn.Module):
+    def __init__(self, in_channels=320, out_channels=320, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
+        self.lstm = nn.LSTM(256, 256, batch_first=batch_first)
+
+    def forward(self, x):
+
+        last_feature = x[-1]
+
+        # print("Before modification:")
+        # print(x[-1][0, 0, 0, :2])  # print a small part of the tensor
+        # print(last_feature.shape)
+        batch_size, channels, height, width = last_feature.shape
+
+        # Apply 2D convolution
+        last_feature = self.conv(last_feature)
+
+        # Reshape output for LSTM
+        last_feature = last_feature.view(batch_size, -1, height * width)
+
+        # Pass through LSTM
+        lstm_out, _ = self.lstm(last_feature)
+
+        # Reshape output back to original shape
+        last_feature = lstm_out.view(batch_size, channels, height, width)
+
+        x[-1] = last_feature
+
+        # print("After modification:")
+        # print(x[-1][0, 0, 0, :2])  # print a small part of the tensor
+
+        return x
+
+
+class MyFlexibleUNet2dLSTM(nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.flexibleUNet = FlexibleUNet(
+            in_channels=65,
+            out_channels=1,
+            backbone="efficientnet-b0",
+            pretrained=True,
+            spatial_dims=2,
+            dropout=0.0,
+        )
+        # Add ConvLSTM layer after the last convolution layer in the encoder
+        assert args.roi_x == args.roi_y, "ROI x and y must be the same"
+        self.conv_lstm = ConvLSTM()
+        self.sig = nn.Sigmoid()
+
+    def forward(self, x):
+        x_out = self.flexibleUNet.encoder(x)
+        x_out = self.conv_lstm(x_out)
+        x_out = self.flexibleUNet.decoder(x_out)
+        x_out = self.flexibleUNet.segmentation_head(x_out)
+        x_out = self.sig(x_out)
+        return x_out

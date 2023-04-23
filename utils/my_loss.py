@@ -14,13 +14,15 @@ class CustomWeightedCELoss(nn.Module):
         return ce_loss
 
 class CustomWeightedDiceCELoss(nn.Module):
-    def __init__(self, ink_weight=10.0, background_weight=1.0):
+    def __init__(self, ink_weight=10.0, background_weight=1.0, weight=(1.0, 1.0)):
+        assert len(weight) == 2, "weight length must be 2"
         super(CustomWeightedDiceCELoss, self).__init__()
         self.ce_loss = CustomWeightedCELoss(ink_weight, background_weight)
         self.dice_loss = GeneralizedDiceLoss(include_background=True, to_onehot_y=False, softmax=False)
+        self.weight = weight
 
     def forward(self, logits, labels):
         ce_loss_value = self.ce_loss(logits, labels)
         dice_loss_value = self.dice_loss(logits, labels)
-        total_loss = ce_loss_value + dice_loss_value
+        total_loss = self.weight[0] * ce_loss_value + self.weight[1] * dice_loss_value
         return total_loss

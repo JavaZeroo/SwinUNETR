@@ -40,11 +40,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             param.grad = None
         with autocast(enabled=args.amp):
             logits = model(data)
-            # print(logits.shape, data.shape, target.shape)
-            if args.model_mode == "2dswin":
-                logits, target = logits.cuda(0), target.cuda(0)
-                loss = loss_func(logits, target[ :, 0:1, :, :])
-            elif args.model_mode == "2dfunet":
+            if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
             elif args.model_mode == "3dswin":
@@ -55,7 +51,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
                     print(logits.device, target[:, :, :, :, 0:1].device)
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
             else:
-                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet', 2dfunetlstm]")
         if args.amp:
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -82,7 +78,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
     return run_loss.avg
 
 
-def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_label=None, post_pred=None):
+def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=None, post_label=None, post_pred=None):
     model.eval()
     run_acc = AverageMeter()
     start_time = time.time()
@@ -92,14 +88,10 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            if args.model_mode == "3dswin":
+            if args.model_mode in ["3dswin", "3dunet"]:
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
-            elif args.model_mode == "2dswin":
+            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
-            elif args.model_mode == "2dfunet":
-                data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
-            elif args.model_mode == "3dunet":
-                data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
                 # print(data, target)
@@ -123,6 +115,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
             acc, not_nans = acc_func.aggregate()
             acc = acc.cuda(args.rank)
             run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
+            loss = loss_func(logits, target)
 
             if args.rank == 0:
                 avg_acc = np.mean(run_acc.avg)
@@ -133,7 +126,7 @@ def val_epoch(model, loader, epoch, acc_func, args, model_inferer=None, post_lab
                     "time {:.2f}s".format(time.time() - start_time),
                 )
             start_time = time.time()
-    return run_acc.avg
+    return run_acc.avg, loss.item()
 
 
 def save_checkpoint(model, epoch, args, filename="model.pt", best_acc=0, optimizer=None, scheduler=None):
@@ -188,17 +181,20 @@ def run_training(
             )
         if args.rank == 0 and writer is not None and epoch % 10 == 0:
             writer.add_scalar("train_loss", train_loss, epoch)
+            writer.add_scalar("train_lr", optimizer.param_groups[0]['lr'], epoch)
+            
         b_new_best = False
         if (epoch + 1) % args.val_every == 0:
             if args.distributed:
                 torch.distributed.barrier()
             epoch_time = time.time()
             print("Start_val")
-            val_avg_acc = val_epoch(
+            val_avg_acc, val_loss = val_epoch(
                 model,
                 val_loader,
                 epoch=epoch,
                 acc_func=acc_func,
+                loss_func=loss_func,
                 model_inferer=model_inferer,
                 args=args,
                 post_label=post_label,
@@ -216,6 +212,7 @@ def run_training(
                 )
                 if writer is not None:
                     writer.add_scalar("val_acc", val_avg_acc, epoch)
+                    writer.add_scalar("val_loss", val_loss, epoch)
                 if val_avg_acc > val_acc_max:
                     print("new best ({:.6f} --> {:.6f}). ".format(val_acc_max, val_avg_acc))
                     val_acc_max = val_avg_acc

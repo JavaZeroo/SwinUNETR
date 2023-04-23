@@ -25,12 +25,12 @@ from utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss, FocalLoss
-from monai.metrics import DiceMetric, MeanIoU, FBetaScore
+from monai.metrics import DiceMetric, MeanIoU
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM
 from utils.my_loss import CustomWeightedDiceCELoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -99,8 +99,10 @@ parser.add_argument("--spatial_dims", default=3, type=int, help="spatial dimensi
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
 parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
 parser.add_argument("--cache_rate", default=0.4, type=float, help="cache_rate")
-parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
+parser.add_argument("--loss_weight", default=(2.0, 1.0), type=tuple, help="cache_rate")
+parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunet', '2dfunetlstm']")
 parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
+parser.add_argument("--eff", default="b5", help="efficientnet-['b0', 'b1', 'b2', 'b3', 'b4', 'b5']")
 parser.add_argument("--debug", action="store_true", help="debug mode")
 
 parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
@@ -148,6 +150,8 @@ def main_worker(gpu, args):
         model = MyModel3dunet()
     elif args.model_mode == "2dfunet":
         model = MyFlexibleUNet2d(args)
+    elif args.model_mode == "2dfunetlstm":
+        model = MyFlexibleUNet2dLSTM(args)
     else:
         raise ValueError("model mode error")
 
@@ -155,14 +159,10 @@ def main_worker(gpu, args):
     if args.resume_ckpt:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model_mode == "2dswin":
+        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm"]:
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
-        elif args.model_mode == "3dunet":
-            model.load_state_dict(model_dict)
-        elif args.model_mode == "2dfunet":
-            model.load_state_dict(model_dict)
         else:
             raise ValueError("model mode error")
         print("Use pretrained weights")
@@ -196,15 +196,15 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'DiceCELoss':
         loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
     elif args.loss_mode == 'custom':
-        loss = CustomWeightedDiceCELoss()
+        loss = CustomWeightedDiceCELoss(weight=args.loss_weight)
         
     
     post_label = AsDiscrete(to_onehot=args.out_channels)
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
-    f_beta_acc = FBetaScore()
-    if args.model_mode == "3dswin":
+    # f_beta_acc = FBetaScore()
+    if args.model_mode in ["3dswin", "3dunet"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y,args.roi_z),
@@ -216,7 +216,7 @@ def main_worker(gpu, args):
             device = "cpu", 
             sw_device = "cuda"
         )
-    elif args.model_mode == "2dswin":
+    elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y),
@@ -227,36 +227,10 @@ def main_worker(gpu, args):
             padding_mode = "reflect", 
             device = "cpu", 
             sw_device = "cuda"
-        )
-    elif args.model_mode == "3dunet":
-        model_inferer = partial(
-            sliding_window_inference,
-            roi_size = (args.roi_x,args.roi_y,args.roi_z),
-            sw_batch_size = 8,
-            predictor = model,
-            overlap = 0.5,
-            progress = True,
-            padding_mode = "reflect", 
-            device = "cpu", 
-            sw_device = "cuda"
-        )
-    elif args.model_mode == "2dfunet":
-        model_inferer = partial(
-            sliding_window_inference,
-            roi_size = (args.roi_x,args.roi_y),
-            sw_batch_size = 8,
-            predictor = model,
-            overlap = 0,
-            progress = True,
-            padding_mode = "reflect", 
-            device = "cpu", 
-            sw_device = "cuda"
-        )
-        
+        )     
     else:
         raise ValueError("model mode error")
         
-
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("Total parameters count", pytorch_total_params)
 
