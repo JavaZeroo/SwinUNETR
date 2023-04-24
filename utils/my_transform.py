@@ -77,27 +77,34 @@ class change_channeld(MapTransform):
         return d
     
 class z_clip(Transform):
-    def __init__(self, num_channel=None):
+    def __init__(self, num_channel=None, is_3d = False, mid = None):
         if num_channel is None:
             raise ValueError("num_channel is None")
         self.num_channel = num_channel
+        self.is_3d = is_3d
+        self.mid = mid
         pass
     
     def __call__(self, data):
         if self.num_channel == 65:
             return data
-        mid = 65 // 2
+        mid = 65 // 2 if self.mid is None else self.mid
         start = mid - self.num_channel // 2
         end = mid + self.num_channel // 2
+        assert start >= 0 and end <= 65, f"z_clip is not allow for start: {start}, end: {end}"
         if isinstance(data, torch.Tensor):
-            data = data[:, start:end, :, :]
+            if self.is_3d:
+                data = data[ :, :, :, start:end]
+            else:
+                data = data[:, start:end, :, :]
+            
         return data
     
 class z_clipd(MapTransform):
     """
     Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
     """
-    def __init__(self, keys: KeysCollection, num_channel=None) -> None:
+    def __init__(self, keys: KeysCollection, num_channel=None, is_3d = False, mid = None) -> None:
         """
         Args:
             keys: keys of the corresponding items to be transformed.
@@ -106,7 +113,7 @@ class z_clipd(MapTransform):
         """
         super().__init__(keys, )
 
-        self.adder = z_clip(num_channel=num_channel)
+        self.adder = z_clip(num_channel=num_channel, is_3d=is_3d, mid=mid)
         pass
     
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
@@ -144,8 +151,9 @@ class printShaped(MapTransform):
         if not self.debug:
             return dict(data)
         d = dict(data)
+        print("==================================")
         for key in self.key_iterator(d):
-            print(d[key].shape)
+            print(f"{key}: {d[key].shape}")
         return d
     
 class Drop1Layer(Transform):

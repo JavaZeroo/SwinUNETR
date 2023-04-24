@@ -30,7 +30,7 @@ from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus
 from utils.my_loss import CustomWeightedDiceCELoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -100,18 +100,23 @@ parser.add_argument("--num_channel", default=65, type=int, help="num of copy cha
 parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
 parser.add_argument("--cache_rate", default=0.4, type=float, help="cache_rate")
 parser.add_argument("--loss_weight", default=(2.0, 1.0), type=tuple, help="cache_rate")
-parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunet', '2dfunetlstm']")
+parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunet', '2dfunetlstm', '3dunet++']")
 parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
 parser.add_argument("--eff", default="b5", help="efficientnet-['b0', 'b1', 'b2', 'b3', 'b4', 'b5']")
 parser.add_argument("--debug", action="store_true", help="debug mode")
 
 parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
+parser.add_argument("--mid", default=None, type=int, help="num of samples of transform")
+parser.add_argument("--threshold", default=0.4, type=int, help="num of samples of transform")
 
 def main():
     args = parser.parse_args()
     args.amp = not args.noamp
     args.use_normal_dataset = args.normal if args.normal else args.use_normal_dataset
     args.logdir = "./runs/" + args.logdir
+    args.num_channel = args.roi_z
+    if args.debug:
+        args.val_every = 1
     if args.distributed:
         args.ngpus_per_node = torch.cuda.device_count()
         print("Found total gpus", args.ngpus_per_node)
@@ -152,6 +157,8 @@ def main_worker(gpu, args):
         model = MyFlexibleUNet2d(args)
     elif args.model_mode == "2dfunetlstm":
         model = MyFlexibleUNet2dLSTM(args)
+    elif args.model_mode == "3dunet++":
+        model = MyBasicUNetPlusPlus(args)
     else:
         raise ValueError("model mode error")
 
@@ -159,7 +166,7 @@ def main_worker(gpu, args):
     if args.resume_ckpt:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm"]:
+        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++"]:
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
@@ -196,7 +203,7 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'DiceCELoss':
         loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
     elif args.loss_mode == 'custom':
-        loss = CustomWeightedDiceCELoss(weight=args.loss_weight)
+        loss = CustomWeightedDiceCELoss(ink_weight=3.0, weight=args.loss_weight)
         
     
     post_label = AsDiscrete(to_onehot=args.out_channels)
@@ -204,7 +211,7 @@ def main_worker(gpu, args):
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     # f_beta_acc = FBetaScore()
-    if args.model_mode in ["3dswin", "3dunet"]:
+    if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y,args.roi_z),

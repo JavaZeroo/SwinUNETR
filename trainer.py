@@ -19,7 +19,8 @@ import torch.nn.parallel
 import torch.utils.data.distributed
 from tensorboardX import SummaryWriter
 from torch.cuda.amp import GradScaler, autocast
-from utils.utils import AverageMeter, distributed_all_gather
+from utils.utils import AverageMeter, distributed_all_gather, add_fig, binary
+
 
 from monai.data import decollate_batch
 
@@ -40,10 +41,10 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             param.grad = None
         with autocast(enabled=args.amp):
             logits = model(data)
-            if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
+            if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++"]:
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
-            elif args.model_mode == "3dswin":
+            elif args.model_mode in ["3dswin", "3dunet++"]:
                 loss = loss_func(logits, target[:, :, :, :, 0:1])
             elif args.model_mode == "3dunet":
                 if args.debug:
@@ -78,7 +79,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
     return run_loss.avg
 
 
-def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=None, post_label=None, post_pred=None):
+def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=None, post_label=None, post_pred=None, writer=None):
     model.eval()
     run_acc = AverageMeter()
     start_time = time.time()
@@ -88,9 +89,9 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            if args.model_mode in ["3dswin", "3dunet"]:
+            if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
-            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
+            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++"]:
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
@@ -100,12 +101,19 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                     logits = model_inferer(data)
                 else:
                     logits = model(data)
+            if not logits.is_cuda:
+                target = target.cpu()
+            loss = loss_func(logits, target)
             if args.debug:
                 print(logits.shape, target.shape)
                 torch.save(logits, "logits.pt")
                 torch.save(target, "target.pt")
-            if not logits.is_cuda:
-                target = target.cpu()
+            
+            logits = binary(logits, threshold=args.threshold)
+            target = binary(target, threshold=args.threshold)
+            
+            if writer is not None:
+                add_fig(writer=writer, y=target, y_pred=logits, global_step=epoch)
             val_outputs_list = decollate_batch(logits)
             # val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
             val_labels_list = decollate_batch(target)
@@ -115,7 +123,6 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
             acc, not_nans = acc_func.aggregate()
             acc = acc.cuda(args.rank)
             run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
-            loss = loss_func(logits, target)
 
             if args.rank == 0:
                 avg_acc = np.mean(run_acc.avg)
@@ -165,6 +172,7 @@ def run_training(
         scaler = GradScaler()
     val_acc_max = 0.0
     for epoch in range(start_epoch, args.max_epochs):
+        epoch += 1
         if args.distributed:
             train_loader.sampler.set_epoch(epoch)
             torch.distributed.barrier()
@@ -199,6 +207,7 @@ def run_training(
                 args=args,
                 post_label=post_label,
                 post_pred=post_pred,
+                writer=writer
             )
             
             val_avg_acc = np.mean(val_avg_acc)

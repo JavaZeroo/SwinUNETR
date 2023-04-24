@@ -1,5 +1,5 @@
 import torch.nn as nn
-from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet, AttentionUnet
+from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet, BasicUNetPlusPlus
 from monai.networks.blocks.convolutions import Convolution
 
 class MyModel(nn.Module):
@@ -131,7 +131,7 @@ class MyFlexibleUNet2dLSTM(nn.Module):
     def __init__(self, args):
         super().__init__()
         self.flexibleUNet = FlexibleUNet(
-            in_channels=65,
+            in_channels=args.num_channel,
             out_channels=1,
             backbone="efficientnet-b0",
             pretrained=True,
@@ -149,4 +149,13 @@ class MyFlexibleUNet2dLSTM(nn.Module):
         x_out = self.flexibleUNet.decoder(x_out)
         x_out = self.flexibleUNet.segmentation_head(x_out)
         x_out = self.sig(x_out)
+        return x_out
+    
+class MyBasicUNetPlusPlus(nn.Module):
+    def __init__(self, args) -> None:
+        super().__init__()
+        self.basicUNetPlusPlus = BasicUNetPlusPlus(in_channels=1, out_channels=1)
+        
+    def forward(self, x):
+        x_out = self.basicUNetPlusPlus(x)
         return x_out
