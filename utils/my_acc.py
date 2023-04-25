@@ -18,7 +18,7 @@ import torch
 from monai.metrics.utils import do_metric_reduction, ignore_background
 from monai.utils import MetricReduction
 
-from .metric import CumulativeIterationMetric
+from monai.metrics import CumulativeIterationMetric
 
 
 class FBetaScore(CumulativeIterationMetric):
