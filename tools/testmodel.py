@@ -16,15 +16,15 @@ from monai.networks.nets import SwinUNETR
 import torch
 import torch.nn as nn
 from monai.losses import DiceCELoss
-from utils.myModel import MyModel, MyModel3dunet
-
+from utils.myModel import MyModel, MyModel3dunet, MyFlexibleUNet2dMultiScaleLSTM
+from easydict import EasyDict as edict
 print(monai.__version__)
 # torch.cuda.set_device(0)
-
+args = edict(roi_x=512, roi_y=512, num_channel=65)
 # (batch_size, in_channel, H, W, D)
-data = torch.ones(8, 1, 512, 512, 64)
+data = torch.ones(8, 65, 512, 512)
 
-model = MyModel3dunet()
+model = MyFlexibleUNet2dMultiScaleLSTM(args=args)
 
 model.eval()
 

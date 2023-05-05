@@ -2,6 +2,20 @@ import torch.nn as nn
 from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet, BasicUNetPlusPlus
 from monai.networks.blocks.convolutions import Convolution
 
+
+encoder_feature_channel = {
+    "efficientnet-b0": (16, 24, 40, 112, 320),
+    "efficientnet-b1": (16, 24, 40, 112, 320),
+    "efficientnet-b2": (16, 24, 48, 120, 352),
+    "efficientnet-b3": (24, 32, 48, 136, 384),
+    "efficientnet-b4": (24, 32, 56, 160, 448),
+    "efficientnet-b5": (24, 40, 64, 176, 512),
+    "efficientnet-b6": (32, 40, 72, 200, 576),
+    "efficientnet-b7": (32, 48, 80, 224, 640),
+    "efficientnet-b8": (32, 56, 88, 248, 704),
+    "efficientnet-l2": (72, 104, 176, 480, 1376),
+}
+
 class MyModel(nn.Module):
     def __init__(self):
         super().__init__()
@@ -102,9 +116,6 @@ class ConvLSTM(nn.Module):
 
         last_feature = x[-1]
 
-        # print("Before modification:")
-        # print(x[-1][0, 0, 0, :2])  # print a small part of the tensor
-        # print(last_feature.shape)
         batch_size, channels, height, width = last_feature.shape
 
         # Apply 2D convolution
@@ -121,9 +132,6 @@ class ConvLSTM(nn.Module):
 
         x[-1] = last_feature
 
-        # print("After modification:")
-        # print(x[-1][0, 0, 0, :2])  # print a small part of the tensor
-
         return x
 
 
@@ -133,18 +141,25 @@ class MyFlexibleUNet2dLSTM(nn.Module):
         self.flexibleUNet = FlexibleUNet(
             in_channels=args.num_channel,
             out_channels=1,
-            backbone="efficientnet-b0",
+            backbone=f"efficientnet-{args.eff}",
             pretrained=True,
             spatial_dims=2,
             dropout=0.0,
         )
         # Add ConvLSTM layer after the last convolution layer in the encoder
         assert args.roi_x == args.roi_y, "ROI x and y must be the same"
-        self.conv_lstm = ConvLSTM()
+        self.debug = args.debug
+        channels = encoder_feature_channel[f"efficientnet-{args.eff}"]
+        self.conv_lstm = ConvLSTM(in_channels=channels[-1], out_channels=channels[-1], kernel_size=1, padding=0)
         self.sig = nn.Sigmoid()
 
     def forward(self, x):
+        if self.debug:
+            print(x.shape)
         x_out = self.flexibleUNet.encoder(x)
+        if self.debug:
+            for i in x_out:
+                print(i.shape)
         x_out = self.conv_lstm(x_out)
         x_out = self.flexibleUNet.decoder(x_out)
         x_out = self.flexibleUNet.segmentation_head(x_out)
@@ -158,4 +173,44 @@ class MyBasicUNetPlusPlus(nn.Module):
         
     def forward(self, x):
         x_out = self.basicUNetPlusPlus(x)
+        return x_out
+    
+
+
+
+class MultiScaleConvLSTM(nn.Module):
+    def __init__(self, backbone_channels, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        self.convlstm_layers = nn.ModuleList([
+            ConvLSTM(in_ch, out_ch, kernel_size, padding, batch_first)
+            for in_ch, out_ch in zip(backbone_channels[:-1], backbone_channels[1:])
+        ])
+
+    def forward(self, features_list):
+        for i, convlstm in enumerate(self.convlstm_layers):
+            features_list[i] = convlstm(features_list[i])
+        return features_list
+
+class MyFlexibleUNet2dMultiScaleLSTM(nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.flexibleUNet = FlexibleUNet(
+            in_channels=args.num_channel,
+            out_channels=1,
+            backbone=f"efficientnet-{args.eff}",
+            pretrained=True,
+            spatial_dims=2,
+            dropout=0.0,
+        )
+        # Add MultiScaleConvLSTM layer after the last convolution layer in the encoder
+        backbone_channels = encoder_feature_channel[f"efficientnet-{args.eff}"]
+        self.multi_scale_conv_lstm = MultiScaleConvLSTM(backbone_channels=backbone_channels[1:])
+        self.sig = nn.Sigmoid()
+
+    def forward(self, x):
+        x_out = self.flexibleUNet.encoder(x)
+        x_out = self.multi_scale_conv_lstm(x_out)
+        x_out = self.flexibleUNet.decoder(x_out)
+        x_out = self.flexibleUNet.segmentation_head(x_out)
+        x_out = self.sig(x_out)
         return x_out

@@ -120,20 +120,17 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
             # val_labels_convert = [post_label(val_label_tensor) for val_label_tensor in val_labels_list]
             acc_func.reset()
             acc_func(y_pred=val_outputs_list, y=val_labels_list)
-            acc, not_nans = acc_func.aggregate()
-            acc = acc.cuda(args.rank)
-            run_acc.update(acc.cpu().numpy(), n=not_nans.cpu().numpy())
+            acc = acc_func.aggregate()[0]
 
             if args.rank == 0:
-                avg_acc = np.mean(run_acc.avg)
                 print(
                     "Val {}/{} {}/{}".format(epoch, args.max_epochs, idx, len(loader)),
                     "acc",
-                    avg_acc,
+                    acc,
                     "time {:.2f}s".format(time.time() - start_time),
                 )
             start_time = time.time()
-    return run_acc.avg, loss.item()
+    return acc, loss.item()
 
 
 def save_checkpoint(model, epoch, args, filename="model.pt", best_acc=0, optimizer=None, scheduler=None):
@@ -210,7 +207,7 @@ def run_training(
                 writer=writer
             )
             
-            val_avg_acc = np.mean(val_avg_acc)
+            #val_avg_acc = np.mean(val_avg_acc)
 
             if args.rank == 0:
                 print(
@@ -223,7 +220,7 @@ def run_training(
                     writer.add_scalar("val_acc", val_avg_acc, epoch)
                     writer.add_scalar("val_loss", val_loss, epoch)
                 if val_avg_acc > val_acc_max:
-                    print("new best ({:.6f} --> {:.6f}). ".format(val_acc_max, val_avg_acc))
+                    print("new best ({:.6f} --> {:.6f}). ".format(float(val_acc_max), float(val_avg_acc)))
                     val_acc_max = val_avg_acc
                     b_new_best = True
                     if args.rank == 0 and args.logdir is not None and args.save_checkpoint:

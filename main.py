@@ -29,9 +29,10 @@ from monai.metrics import DiceMetric, MeanIoU
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
+from utils.my_acc import FBetaScore
 
 from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus
-from utils.my_loss import CustomWeightedDiceCELoss
+from utils.my_loss import CustomWeightedDiceCELoss, CustomWeightedFocalLoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -197,7 +198,8 @@ def main_worker(gpu, args):
             raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
 
     if args.loss_mode == 'focalLoss':
-        loss = FocalLoss(weight=[10.0])
+        loss = CustomWeightedFocalLoss(ink_weight=3.0, weight=args.loss_weight)
+        # loss = FocalLoss(weight=[10.0])
     elif args.loss_mode == 'squared_dice':
         loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     elif args.loss_mode == 'DiceCELoss':
@@ -210,6 +212,8 @@ def main_worker(gpu, args):
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
+    f05_acc = FBetaScore(beta=0.5, include_background=True)
+
     # f_beta_acc = FBetaScore()
     if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
         model_inferer = partial(
@@ -298,13 +302,14 @@ def main_worker(gpu, args):
         break
     print("Pass Test")
     print(args)
+    
     accuracy = run_training(
         model=model,
         train_loader=loader[0],
         val_loader=loader[1],
         optimizer=optimizer,
         loss_func=loss,
-        acc_func=miou_acc,
+        acc_func=f05_acc,
         args=args,
         model_inferer=model_inferer,
         scheduler=scheduler,

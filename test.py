@@ -21,7 +21,7 @@ from utils.utils import dice, resample_3d, resample_2d
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
 
-from utils.myModel import MyModel,MyModel2d
+from utils.myModel import MyModel,MyModel2d, MyFlexibleUNet2dLSTM
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
 parser.add_argument("--checkpoint", default=None, help="start training from saved checkpoint")
@@ -87,9 +87,18 @@ parser.add_argument("--squared_dice", action="store_true", help="use squared Dic
 
 parser.add_argument("--focalLoss", action="store_true", help="use FocalLoss")
 parser.add_argument("--num_channel", default=65, type=int, help="num of copy channels")
+parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
+parser.add_argument("--cache_rate", default=0.4, type=float, help="cache_rate")
+parser.add_argument("--loss_weight", default=(2.0, 1.0), type=tuple, help="cache_rate")
+parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
+parser.add_argument("--eff", default="b5", help="efficientnet-['b0', 'b1', 'b2', 'b3', 'b4', 'b5']")
+parser.add_argument("--debug", action="store_true", help="debug mode")
+
 parser.add_argument("--exp_name", default="test2", type=str, help="experiment name")
 parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet']")
-
+parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
+parser.add_argument("--mid", default=None, type=int, help="num of samples of transform")
+parser.add_argument("--threshold", default=0.5, type=int, help="num of samples of transform")
 
 def main():
     args = parser.parse_args()
@@ -106,13 +115,15 @@ def main():
         model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
     elif args.model_mode == "2dswin":
         model = MyModel2d(img_size=(args.roi_x,args.roi_y))
+    elif args.model_mode == "2dfunetlstm":
+        model = MyFlexibleUNet2dLSTM(args)
     else:
         raise ValueError("model mode error")
     model_dict = torch.load(pretrained_pth)["state_dict"]
     model.load_state_dict(model_dict)
     model.eval()
     model.to(device)
-
+    print(args)
     with torch.no_grad():
         dice_list_case = []
         for i, batch in enumerate(val_loader):
@@ -125,7 +136,7 @@ def main():
             print("Inference on case {}".format(img_name))
             val_outputs = sliding_window_inference(
                 val_inputs, 
-                (256, 256), 
+                (args.roi_x, args.roi_y), 
                 4, 
                 model, 
                 overlap = 0,
@@ -140,12 +151,12 @@ def main():
             val_outputs = np.argmax(val_outputs, axis=1).astype(np.uint8)[0]
             val_labels = val_labels.cpu()
             val_labels = np.array(val_labels)[0, 0, :, :]
-            if args.model_mode == "2dswin":
+            if args.model_mode in ["2dswin", "2dfunetlstm"]:
                 val_outputs = resample_2d(val_outputs, target_shape)
             elif args.model_mode == "3dswin":
                 val_outputs = resample_3d(val_outputs, target_shape)
             else:
-                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunetlstm']")
                 
             dice_list_sub = []
             for i in [1]:
