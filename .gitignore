@@ -11,3 +11,4 @@ nohup.out
 outputs/*
 pretrained_models/*
 *.pt
+binary.npy

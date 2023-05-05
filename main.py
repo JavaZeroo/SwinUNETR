@@ -44,7 +44,7 @@ parser.add_argument("--data_dir", default="/root/autodl-tmp/data_split", type=st
 parser.add_argument("--json_list", default="/root/autodl-tmp/data_split/data_split.json", type=str, help="dataset json file")
 parser.add_argument(
     "--pretrained_model_name",
-    default="swin_unetr.base_5000ep_f48_lr2e-4_pretrained",
+    default=None,
     type=str,
     help="pretrained model name",
 )
@@ -106,6 +106,7 @@ parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 
 parser.add_argument("--eff", default="b5", help="efficientnet-['b0', 'b1', 'b2', 'b3', 'b4', 'b5']")
 parser.add_argument("--debug", action="store_true", help="debug mode")
 
+parser.add_argument("--test", action="store_true", help="test mode")
 parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
 parser.add_argument("--mid", default=None, type=int, help="num of samples of transform")
 parser.add_argument("--threshold", default=0.4, type=int, help="num of samples of transform")
@@ -164,7 +165,7 @@ def main_worker(gpu, args):
         raise ValueError("model mode error")
 
     
-    if args.resume_ckpt:
+    if args.pretrained_model_name is not None:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
         if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++"]:
@@ -302,22 +303,36 @@ def main_worker(gpu, args):
         break
     print("Pass Test")
     print(args)
-    
-    accuracy = run_training(
-        model=model,
-        train_loader=loader[0],
-        val_loader=loader[1],
-        optimizer=optimizer,
-        loss_func=loss,
-        acc_func=f05_acc,
-        args=args,
-        model_inferer=model_inferer,
-        scheduler=scheduler,
-        start_epoch=start_epoch,
-        post_label=post_label,
-        post_pred=post_pred,
-    )
-    return accuracy
+    if args.test:
+        from trainer import val_epoch
+        val_avg_acc, val_loss = val_epoch(
+            model,
+            loader[1],
+            epoch=0,
+            acc_func=f05_acc,
+            loss_func=loss,
+            model_inferer=model_inferer,
+            args=args,
+            post_label=post_label,
+            post_pred=post_pred,
+            writer=None
+        )
+    else:
+        accuracy = run_training(
+            model=model,
+            train_loader=loader[0],
+            val_loader=loader[1],
+            optimizer=optimizer,
+            loss_func=loss,
+            acc_func=f05_acc,
+            args=args,
+            model_inferer=model_inferer,
+            scheduler=scheduler,
+            start_epoch=start_epoch,
+            post_label=post_label,
+            post_pred=post_pred,
+        )
+        return accuracy
 
 
 if __name__ == "__main__":

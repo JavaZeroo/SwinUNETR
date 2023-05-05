@@ -16,10 +16,12 @@ import nibabel as nib
 import numpy as np
 import torch
 from utils.data_utils import get_loader
-from utils.utils import dice, resample_3d, resample_2d
+from utils.utils import dice, resample_3d, resample_2d, binary
 
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import SwinUNETR
+from monai.data import decollate_batch
+from utils.my_acc import FBetaScore
 
 from utils.myModel import MyModel,MyModel2d, MyFlexibleUNet2dLSTM
 
@@ -61,7 +63,7 @@ parser.add_argument("--use_normal_dataset", action="store_true", help="use monai
 parser.add_argument("--a_min", default=0.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
-parser.add_argument("--b_max", default=1.0, type=float, help="b_max in ScaleIntensityRanged")
+parser.add_argument("--b_max", default=255.0, type=float, help="b_max in ScaleIntensityRanged")
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
@@ -103,6 +105,7 @@ parser.add_argument("--threshold", default=0.5, type=int, help="num of samples o
 def main():
     args = parser.parse_args()
     args.test_mode = True
+    args.num_channel = args.roi_z
     output_directory = "./outputs/" + args.exp_name
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
@@ -119,6 +122,8 @@ def main():
         model = MyFlexibleUNet2dLSTM(args)
     else:
         raise ValueError("model mode error")
+    f05_acc = FBetaScore(beta=0.5, include_background=True)
+
     model_dict = torch.load(pretrained_pth)["state_dict"]
     model.load_state_dict(model_dict)
     model.eval()
@@ -127,9 +132,8 @@ def main():
     with torch.no_grad():
         dice_list_case = []
         for i, batch in enumerate(val_loader):
-            val_inputs, val_labels = (batch["image"].cuda(), batch["label"].cuda())
-            print(type(val_labels))
-            print(val_labels.shape)
+            val_inputs, val_labels = (batch["image"].cuda(), batch["label"][ :, 0:1, :, :].cuda())
+
             _, d, h, w = val_labels.shape
             target_shape = (h, w)
             img_name = batch["image_meta_dict"]["filename_or_obj"][0].split("/")[-1]
@@ -146,8 +150,23 @@ def main():
                 sw_device = "cuda"
             )
             print(val_outputs.shape)
-            val_outputs = torch.softmax(val_outputs, 1).cpu()
-            val_outputs = np.array(val_outputs)
+            if not val_outputs.is_cuda:
+                val_labels = val_labels.cpu()
+            val_outputs_bin = binary(val_outputs, threshold=args.threshold)
+            val_labels_bin = binary(val_labels, threshold=args.threshold)
+
+            np.save("binary.npy", val_outputs_bin)
+            val_outputs_list = decollate_batch(val_outputs_bin)
+            # val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
+            val_labels_list = decollate_batch(val_labels_bin)
+            # val_labels_convert = [post_label(val_label_tensor) for val_label_tensor in val_labels_list]
+            f05_acc.reset()
+            f05_acc(y_pred=val_outputs_list, y=val_labels_list)
+            acc = f05_acc.aggregate()[0]
+
+
+            # val_outputs = torch.softmax(val_outputs, 1).cpu()
+            val_outputs = np.array(val_outputs)[0]
             val_outputs = np.argmax(val_outputs, axis=1).astype(np.uint8)[0]
             val_labels = val_labels.cpu()
             val_labels = np.array(val_labels)[0, 0, :, :]
@@ -157,13 +176,13 @@ def main():
                 val_outputs = resample_3d(val_outputs, target_shape)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunetlstm']")
-                
+            
             dice_list_sub = []
             for i in [1]:
                 organ_Dice = dice(val_outputs == i, val_labels == i)
                 dice_list_sub.append(organ_Dice)
             mean_dice = np.mean(dice_list_sub)
-            print("Mean Organ Dice: {}".format(mean_dice))
+            print("acc: {}".format(acc))
             dice_list_case.append(mean_dice)
             np.save(
                 os.path.join(output_directory, img_name), val_outputs[:,:]
