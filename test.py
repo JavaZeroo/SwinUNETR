@@ -63,7 +63,7 @@ parser.add_argument("--use_normal_dataset", action="store_true", help="use monai
 parser.add_argument("--a_min", default=0.0, type=float, help="a_min in ScaleIntensityRanged")
 parser.add_argument("--a_max", default=65535.0, type=float, help="a_max in ScaleIntensityRanged")
 parser.add_argument("--b_min", default=0.0, type=float, help="b_min in ScaleIntensityRanged")
-parser.add_argument("--b_max", default=255.0, type=float, help="b_max in ScaleIntensityRanged")
+parser.add_argument("--b_max", default=256.0, type=float, help="b_max in ScaleIntensityRanged")
 parser.add_argument("--space_x", default=1.5, type=float, help="spacing in x direction")
 parser.add_argument("--space_y", default=1.5, type=float, help="spacing in y direction")
 parser.add_argument("--space_z", default=1.0, type=float, help="spacing in z direction")
