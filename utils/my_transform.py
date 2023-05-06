@@ -5,6 +5,9 @@ from typing import Dict, Hashable, Mapping
 from monai.config.type_definitions import NdarrayOrTensor
 import torch
 
+# 每一个transform都是要两个类，一个是Transform，一个是MapTransform。Transform是对单个数据进行操作，MapTransform是对多个数据进行操作。MapTransform是放在transforms.Compose(里面的
+
+# 删除channel 可以对照着trainer里面的注释看
 class remove_channel(Transform):
     def __init__(self):
         pass
@@ -41,7 +44,8 @@ class remove_channeld(MapTransform):
         for key in self.key_iterator(d):
             d[key] = self.adder(d[key])
         return d
-    
+
+
 class change_channel(Transform):
     def __init__(self, back=False):
         self.back = back
@@ -75,7 +79,8 @@ class change_channeld(MapTransform):
         for key in self.key_iterator(d):
             d[key] = self.adder(d[key])
         return d
-    
+
+# 切片
 class z_clip(Transform):
     def __init__(self, num_channel=None, is_3d = False, mid = None):
         if num_channel is None:

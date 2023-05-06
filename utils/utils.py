@@ -101,6 +101,10 @@ def distributed_all_gather(
             tensor_list_out.append(gather_list)
     return tensor_list_out
 
+# 这个transform 是给dataset用的。每次加载的时候都会进行的一些操作。
+# keys是需要操作的数据的名字，比如image，label等等
+# 具体可以看csdn 直接搜monai transform 就有
+# 前面没有"transforms."比如Copyd 那种就是我自己写的。在my_transform
 def get_transforms(args):
     if args.model_mode == "3dswin":
         train_transform = transforms.Compose(

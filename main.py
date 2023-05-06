@@ -11,6 +11,7 @@
 
 import argparse
 import os
+import time
 from functools import partial
 
 import numpy as np
@@ -115,30 +116,18 @@ def main():
     args = parser.parse_args()
     args.amp = not args.noamp
     args.use_normal_dataset = args.normal if args.normal else args.use_normal_dataset
+    args.logdir = f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%d-%H-%M', time.gmtime(time.time()))}"
     args.logdir = "./runs/" + args.logdir
     args.num_channel = args.roi_z
     if args.debug:
         args.val_every = 1
-    if args.distributed:
-        args.ngpus_per_node = torch.cuda.device_count()
-        print("Found total gpus", args.ngpus_per_node)
-        args.world_size = args.ngpus_per_node * args.world_size
-        mp.spawn(main_worker, nprocs=args.ngpus_per_node, args=(args,))
-    else:
-        main_worker(gpu=0, args=args)
+    main_worker(gpu=0, args=args)
 
 
 def main_worker(gpu, args):
 
-    if args.distributed:
-        torch.multiprocessing.set_start_method("fork", force=True)
     np.set_printoptions(formatter={"float": "{: 0.3f}".format}, suppress=True)
     args.gpu = gpu
-    if args.distributed:
-        args.rank = args.rank * args.ngpus_per_node + gpu
-        dist.init_process_group(
-            backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank
-        )
     torch.cuda.set_device(args.gpu)
     torch.backends.cudnn.benchmark = True
     args.test_mode = False
@@ -147,8 +136,9 @@ def main_worker(gpu, args):
     if args.rank == 0:
         print("Batch size is:", args.batch_size, "epochs", args.max_epochs)
     inf_size = [args.roi_x, args.roi_y, args.roi_z]
-
     pretrained_dir = args.pretrained_dir
+    
+    # 定义模型
     if args.model_mode == "3dswin":
         model = MyModel(img_size=(args.roi_x,args.roi_y,args.roi_y))
     elif args.model_mode == "2dswin":
@@ -164,7 +154,7 @@ def main_worker(gpu, args):
     else:
         raise ValueError("model mode error")
 
-    
+    # 如果要接着训练的话，添加模型的名字。然后模型放到pretrained文件夹
     if args.pretrained_model_name is not None:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
@@ -176,28 +166,7 @@ def main_worker(gpu, args):
             raise ValueError("model mode error")
         print("Use pretrained weights")
 
-    if args.use_ssl_pretrained:
-        try:
-            model_dict = torch.load("./pretrained_models/model_swinvit.pt")
-            state_dict = model_dict["state_dict"]
-            # fix potential differences in state dict keys from pre-training to
-            # fine-tuning
-            if "module." in list(state_dict.keys())[0]:
-                print("Tag 'module.' found in state dict - fixing!")
-                for key in list(state_dict.keys()):
-                    state_dict[key.replace("module.", "")] = state_dict.pop(key)
-            if "swin_vit" in list(state_dict.keys())[0]:
-                print("Tag 'swin_vit' found in state dict - fixing!")
-                for key in list(state_dict.keys()):
-                    state_dict[key.replace("swin_vit", "swinViT")] = state_dict.pop(key)
-            # We now load model weights, setting param `strict` to False, i.e.:
-            # this load the encoder weights (Swin-ViT, SSL pre-trained), but leaves
-            # the decoder weights untouched (CNN UNet decoder).
-            model.load_swin_ckpt(state_dict, strict=False)
-            print("Using pretrained self-supervised Swin UNETR backbone weights !")
-        except ValueError:
-            raise ValueError("Self-supervised pre-trained weights not available for" + str(args.model_name))
-
+    # 选择loss函数
     if args.loss_mode == 'focalLoss':
         loss = CustomWeightedFocalLoss(ink_weight=3.0, weight=args.loss_weight)
         # loss = FocalLoss(weight=[10.0])
@@ -208,14 +177,14 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'custom':
         loss = CustomWeightedDiceCELoss(ink_weight=3.0, weight=args.loss_weight)
         
-    
+    # acc函数
     post_label = AsDiscrete(to_onehot=args.out_channels)
     post_pred = AsDiscrete(argmax=True, to_onehot=args.out_channels)
     dice_acc = DiceMetric(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     miou_acc = MeanIoU(include_background=False, reduction=MetricReduction.MEAN, get_not_nans=True)
     f05_acc = FBetaScore(beta=0.5, include_background=True)
 
-    # f_beta_acc = FBetaScore()
+    # 模型推理，主要是validation的时候用的
     if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
         model_inferer = partial(
             sliding_window_inference,
@@ -242,7 +211,8 @@ def main_worker(gpu, args):
         )     
     else:
         raise ValueError("model mode error")
-        
+    
+    # 不重要 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("Total parameters count", pytorch_total_params)
 
@@ -264,13 +234,9 @@ def main_worker(gpu, args):
         print("=> loaded checkpoint '{}' (epoch {}) (bestacc {})".format(args.checkpoint, start_epoch, best_acc))
 
     model.cuda(0)
-
-    if args.distributed:
-        torch.cuda.set_device(args.gpu)
-        if args.norm_name == "batch":
-            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        model.cuda(args.gpu)
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], output_device=args.gpu)
+    ########################################################################
+    
+    # 优化器 选择
     if args.optim_name == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.optim_lr, weight_decay=args.reg_weight)
     elif args.optim_name == "adamw":
@@ -282,6 +248,7 @@ def main_worker(gpu, args):
     else:
         raise ValueError("Unsupported Optimization Procedure: " + str(args.optim_name))
 
+    # 学习率调整策略
     if args.lrschedule == "warmup_cosine":
         scheduler = LinearWarmupCosineAnnealingLR(
             optimizer, warmup_epochs=args.warmup_epochs, max_epochs=args.max_epochs
@@ -292,6 +259,8 @@ def main_worker(gpu, args):
             scheduler.step(epoch=start_epoch)
     else:
         scheduler = None
+        
+        
     print("Lodaer test")
     for i in loader[0]:
         print(i['image'].shape)
@@ -303,36 +272,23 @@ def main_worker(gpu, args):
         break
     print("Pass Test")
     print(args)
-    if args.test:
-        from trainer import val_epoch
-        val_avg_acc, val_loss = val_epoch(
-            model,
-            loader[1],
-            epoch=0,
-            acc_func=f05_acc,
-            loss_func=loss,
-            model_inferer=model_inferer,
-            args=args,
-            post_label=post_label,
-            post_pred=post_pred,
-            writer=None
-        )
-    else:
-        accuracy = run_training(
-            model=model,
-            train_loader=loader[0],
-            val_loader=loader[1],
-            optimizer=optimizer,
-            loss_func=loss,
-            acc_func=f05_acc,
-            args=args,
-            model_inferer=model_inferer,
-            scheduler=scheduler,
-            start_epoch=start_epoch,
-            post_label=post_label,
-            post_pred=post_pred,
-        )
-        return accuracy
+    
+    # 训练
+    accuracy = run_training(
+        model=model,
+        train_loader=loader[0],
+        val_loader=loader[1],
+        optimizer=optimizer,
+        loss_func=loss,
+        acc_func=f05_acc,
+        args=args,
+        model_inferer=model_inferer,
+        scheduler=scheduler,
+        start_epoch=start_epoch,
+        post_label=post_label,
+        post_pred=post_pred,
+    )
+    return accuracy
 
 
 if __name__ == "__main__":

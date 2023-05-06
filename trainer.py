@@ -40,7 +40,14 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         for param in model.parameters():
             param.grad = None
         with autocast(enabled=args.amp):
+            
+            # logits是模型输出。target在加载数据的时候都被复制成了和logits一样的形状。最后输出的时候要把他弄回只有一层的
             logits = model(data)
+            
+            # 2d 和 3d 的张量意义不一样
+            # 2d 的是(batch, channel, h, w)
+            # 3d 的是(batch, channel=1, h, w, d)
+            # '2d 的 channel' 和 '3d的d' 是一个东西
             if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++"]:
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
@@ -60,13 +67,8 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
         else:
             loss.backward()
             optimizer.step()
-        if args.distributed:
-            loss_list = distributed_all_gather([loss], out_numpy=True, is_valid=idx < loader.sampler.valid_length)
-            run_loss.update(
-                np.mean(np.mean(np.stack(loss_list, axis=0), axis=0), axis=0), n=args.batch_size * args.world_size
-            )
-        else:
-            run_loss.update(loss.item(), n=args.batch_size)
+
+        run_loss.update(loss.item(), n=args.batch_size)
         if args.rank == 0:
             print(
                 "Epoch {}/{} {}/{}".format(epoch, args.max_epochs, idx, len(loader)),
@@ -80,6 +82,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
 
 
 def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=None, post_label=None, post_pred=None, writer=None):
+    # 和 train差不多 自己对着看吧
     model.eval()
     run_acc = AverageMeter()
     start_time = time.time()
@@ -159,9 +162,26 @@ def run_training(
     post_label=None,
     post_pred=None,
 ):
+    # Tensorboard添加
     writer = None
     if args.logdir is not None and args.rank == 0:
         writer = SummaryWriter(log_dir=args.logdir)
+        writer.add_hparams({
+                            'model_mode': args.model_mode,
+                            'loss_mode': args.loss_mode,
+                            'effnet_mode': args.eff,
+                            'mid': args.mid,
+                            'lr': args.optim_lr, 
+                            'optim_name': args.optim_name,
+                            'reg_weight': args.reg_weight,
+                            'momentum': args.momentum,
+                            'roi_x': args.roi_x,
+                            'roi_z': args.roi_z,
+                            'dropout_rate': args.dropout_rate,
+                            'infer_overlap': args.infer_overlap,
+                            'lrschedule': args.lrschedule,
+                            },
+                          {'acc': 0})
         if args.rank == 0:
             print("Writing Tensorboard logs to ", args.logdir)
     scaler = None
@@ -170,9 +190,8 @@ def run_training(
     val_acc_max = 0.0
     for epoch in range(start_epoch, args.max_epochs):
         epoch += 1
-        if args.distributed:
-            train_loader.sampler.set_epoch(epoch)
-            torch.distributed.barrier()
+        
+        # rank 别动。没用的，懒得改
         print(args.rank, time.ctime(), "Epoch:", epoch)
         epoch_time = time.time()
         train_loss = train_epoch(
@@ -206,8 +225,6 @@ def run_training(
                 post_pred=post_pred,
                 writer=writer
             )
-            
-            #val_avg_acc = np.mean(val_avg_acc)
 
             if args.rank == 0:
                 print(
