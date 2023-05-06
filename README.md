@@ -1,7 +1,11 @@
 # 运行代码
 
 现在不需要指定logdir。 
-自动生成模板：`f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%d-%H-%M', time.gmtime(time.time()))}"`。所有的log都在runs下面
+自动生成模板：
+```python
+f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%d-%H-%M', time.gmtime(time.time()))}"
+```
+所有的log都在runs下面
 
 然后tensorboard打开代码看这个: [autodl tensorboard](https://www.autodl.com/docs/tensorboard/)
 
