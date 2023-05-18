@@ -166,22 +166,22 @@ def run_training(
     writer = None
     if args.logdir is not None and args.rank == 0:
         writer = SummaryWriter(log_dir=args.logdir)
-        writer.add_hparams({
-                            'model_mode': args.model_mode,
-                            'loss_mode': args.loss_mode,
-                            'effnet_mode': args.eff,
-                            'mid': args.mid,
-                            'lr': args.optim_lr, 
-                            'optim_name': args.optim_name,
-                            'reg_weight': args.reg_weight,
-                            'momentum': args.momentum,
-                            'roi_x': args.roi_x,
-                            'roi_z': args.roi_z,
-                            'dropout_rate': args.dropout_rate,
-                            'infer_overlap': args.infer_overlap,
-                            'lrschedule': args.lrschedule,
-                            },
-                          {'acc': 0})
+        # writer.add_hparams({
+        #                     'model_mode': args.model_mode,
+        #                     'loss_mode': args.loss_mode,
+        #                     'effnet_mode': args.eff,
+        #                     'mid': args.mid,
+        #                     'lr': args.optim_lr, 
+        #                     'optim_name': args.optim_name,
+        #                     'reg_weight': args.reg_weight,
+        #                     'momentum': args.momentum,
+        #                     'roi_x': args.roi_x,
+        #                     'roi_z': args.roi_z,
+        #                     'dropout_rate': args.dropout_rate,
+        #                     'infer_overlap': args.infer_overlap,
+        #                     'lrschedule': args.lrschedule,
+        #                     },
+        #                   {'acc': 0})
         if args.rank == 0:
             print("Writing Tensorboard logs to ", args.logdir)
     scaler = None
@@ -203,7 +203,7 @@ def run_training(
                 "loss: {:.4f}".format(train_loss),
                 "time {:.2f}s".format(time.time() - epoch_time),
             )
-        if args.rank == 0 and writer is not None and epoch % 10 == 0:
+        if args.rank == 0 and writer is not None and epoch % 2 == 0:
             writer.add_scalar("train_loss", train_loss, epoch)
             writer.add_scalar("train_lr", optimizer.param_groups[0]['lr'], epoch)
             

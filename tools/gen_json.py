@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 import numpy as np
+from tqdm import tqdm
+
 DATA_ROOT = Path(r'/root/autodl-tmp/MyData')
 
 js = {
@@ -9,7 +11,6 @@ js = {
     "testing": []
 }
 all_train = []
-from tqdm import tqdm
 for i in tqdm(range(90)):
     for j in range(1, 4):
         tmp_js = {
