@@ -13,3 +13,4 @@ pretrained_models/*
 *.pt
 binary.npy
 tensorboard.output.log
+anaysis/
