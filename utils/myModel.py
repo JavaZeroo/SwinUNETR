@@ -174,20 +174,49 @@ class MyBasicUNetPlusPlus(nn.Module):
     def forward(self, x):
         x_out = self.basicUNetPlusPlus(x)
         return x_out
-    
+
+class ConvLSTM_block(nn.Module):
+    def __init__(self, lstm_length, in_channels=320, out_channels=320, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
+        self.lstm = nn.LSTM(lstm_length, lstm_length, batch_first=batch_first)
+
+    def forward(self, x):
 
 
+        batch_size, channels, height, width = x.shape
+
+        # Apply 2D convolution
+        x_out = self.conv(x)
+
+        # Reshape output for LSTM
+        x_out = x_out.view(batch_size, -1, height * width)
+
+        # Pass through LSTM
+        lstm_out, _ = self.lstm(x_out)
+
+        # Reshape output back to original shape
+        x_out = lstm_out.view(batch_size, channels, height, width)
+
+        return x_out
 
 class MultiScaleConvLSTM(nn.Module):
-    def __init__(self, backbone_channels, kernel_size=1, padding=0, batch_first=True):
+    def __init__(self, args, backbone_channels, kernel_size=1, padding=0, batch_first=True):
         super().__init__()
-        self.convlstm_layers = nn.ModuleList([
-            ConvLSTM(in_ch, out_ch, kernel_size, padding, batch_first)
-            for in_ch, out_ch in zip(backbone_channels[:-1], backbone_channels[1:])
-        ])
+        assert args.roi_x == args.roi_y, "ROI x and y must be the same"
+        conv_list = []
+        for i, channel in enumerate(backbone_channels):
+            if i == 0 or i ==1:
+                conv_list.append(None)
+                continue
+            lstm_length = int((args.roi_x / (2 ** (i+1)))**2)
+            conv_list.append(ConvLSTM_block(lstm_length, channel, channel, kernel_size, padding, batch_first))
+        self.convlstm_layers = nn.ModuleList(conv_list)
 
     def forward(self, features_list):
         for i, convlstm in enumerate(self.convlstm_layers):
+            if convlstm is None:
+                continue
             features_list[i] = convlstm(features_list[i])
         return features_list
 
@@ -200,11 +229,11 @@ class MyFlexibleUNet2dMultiScaleLSTM(nn.Module):
             backbone=f"efficientnet-{args.eff}",
             pretrained=True,
             spatial_dims=2,
-            dropout=0.0,
+            dropout=args.dropout_rate,
         )
         # Add MultiScaleConvLSTM layer after the last convolution layer in the encoder
         backbone_channels = encoder_feature_channel[f"efficientnet-{args.eff}"]
-        self.multi_scale_conv_lstm = MultiScaleConvLSTM(backbone_channels=backbone_channels[1:])
+        self.multi_scale_conv_lstm = MultiScaleConvLSTM(args=args, backbone_channels=backbone_channels)
         self.sig = nn.Sigmoid()
 
     def forward(self, x):

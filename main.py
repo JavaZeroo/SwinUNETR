@@ -25,14 +25,14 @@ from trainer import run_training
 from utils.data_utils import get_loader
 
 from monai.inferers import sliding_window_inference
-from monai.losses import DiceCELoss, FocalLoss
+from monai.losses import DiceCELoss, FocalLoss, DiceFocalLoss
 from monai.metrics import DiceMetric, MeanIoU
 from monai.transforms import Activations, AsDiscrete, Compose
 from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 from utils.my_acc import FBetaScore
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM
 from utils.my_loss import CustomWeightedDiceCELoss, CustomWeightedFocalLoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -148,7 +148,7 @@ def main_worker(gpu, args):
     elif args.model_mode == "2dfunet":
         model = MyFlexibleUNet2d(args)
     elif args.model_mode == "2dfunetlstm":
-        model = MyFlexibleUNet2dLSTM(args)
+        model = MyFlexibleUNet2dMultiScaleLSTM(args)
     elif args.model_mode == "3dunet++":
         model = MyBasicUNetPlusPlus(args)
     else:
@@ -175,7 +175,9 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'DiceCELoss':
         loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
     elif args.loss_mode == 'custom':
-        loss = CustomWeightedDiceCELoss(ink_weight=3.0, weight=args.loss_weight)
+        loss = CustomWeightedDiceCELoss(ink_weight=2.0, weight=args.loss_weight)
+    elif args.loss_mode == 'DiceFocalLoss':
+        loss = DiceFocalLoss(weight=args.loss_weight)
         
     # acc函数
     post_label = AsDiscrete(to_onehot=args.out_channels)
