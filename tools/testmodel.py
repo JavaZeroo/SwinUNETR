@@ -17,7 +17,7 @@ import torch
 import torch.nn as nn
 from monai.losses import DiceCELoss
 from utils.myModel import MyModel, MyModel3dunet, MyFlexibleUNet2dMultiScaleLSTM
-from easydict import EasyDict as edict
+# from easydict import EasyDict as edict
 print(monai.__version__)
 # torch.cuda.set_device(0)
 args = edict(roi_x=512, roi_y=512, num_channel=65, eff='b5')
