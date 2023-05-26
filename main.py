@@ -228,7 +228,7 @@ def main_worker(gpu, args):
         new_state_dict = OrderedDict()
         for k, v in checkpoint["state_dict"].items():
             new_state_dict[k.replace("backbone.", "")] = v
-        model.load_swin_ckpt(new_state_dict, strict=False)
+        model.load_state_dict(new_state_dict, strict=False)
         if "epoch" in checkpoint:
             start_epoch = checkpoint["epoch"]
         if "best_acc" in checkpoint:
