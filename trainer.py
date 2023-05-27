@@ -51,8 +51,10 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++"]:
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
-            elif args.model_mode in ["3dswin", "3dunet++"]:
-                loss = loss_func(logits, target[:, :, :, :, 0:1])
+            elif args.model_mode in ["3dswin", "3dunet++", "3dfunetlstm"]:
+                if args.debug:
+                    print(logits)
+                loss = loss_func(logits[:, :, :, :, 0], target[:, :, :, :, 0])
             elif args.model_mode == "3dunet":
                 if args.debug:
                     print(logits.shape, target[:, :, :, :, 0:1].shape)
@@ -92,7 +94,7 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                 data, target = batch_data
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
-            if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
+            if args.model_mode in ["3dswin", "3dunet", "3dunet++", "3dfunetlstm"]:
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
             elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++"]:
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)

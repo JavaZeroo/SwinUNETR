@@ -32,7 +32,7 @@ from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 from utils.my_acc import FBetaScore
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM, MyFlexibleUNet3dMultiScaleLSTM
 from utils.my_loss import CustomWeightedDiceCELoss, CustomWeightedFocalLoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -121,6 +121,8 @@ def main():
     args.num_channel = args.roi_z
     if args.debug:
         args.val_every = 1
+        args.use_normal_dataset = False
+        args.cache_rate = 0.1
     main_worker(gpu=0, args=args)
 
 
@@ -149,6 +151,8 @@ def main_worker(gpu, args):
         model = MyFlexibleUNet2d(args)
     elif args.model_mode == "2dfunetlstm":
         model = MyFlexibleUNet2dMultiScaleLSTM(args)
+    elif args.model_mode == "3dfunetlstm":
+        model = MyFlexibleUNet3dMultiScaleLSTM(args)
     elif args.model_mode == "3dunet++":
         model = MyBasicUNetPlusPlus(args)
     else:
@@ -158,7 +162,7 @@ def main_worker(gpu, args):
     if args.pretrained_model_name is not None:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++"]:
+        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++", "3dfunetlstm"]:
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
@@ -187,7 +191,7 @@ def main_worker(gpu, args):
     f05_acc = FBetaScore(beta=0.5, include_background=True)
 
     # 模型推理，主要是validation的时候用的
-    if args.model_mode in ["3dswin", "3dunet", "3dunet++"]:
+    if args.model_mode in ["3dswin", "3dunet", "3dunet++", "3dfunetlstm"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y,args.roi_z),

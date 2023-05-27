@@ -243,3 +243,51 @@ class MyFlexibleUNet2dMultiScaleLSTM(nn.Module):
         x_out = self.flexibleUNet.segmentation_head(x_out)
         x_out = self.sig(x_out)
         return x_out
+
+
+
+class MultiScaleConvLSTM3d(nn.Module):
+    def __init__(self, args, backbone_channels, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        assert args.roi_x == args.roi_y, "ROI x and y must be the same"
+        conv_list = []
+        for i, channel in enumerate(backbone_channels):
+            if i == 0 or i ==1:
+                conv_list.append(None)
+                continue
+            lstm_length = int((args.roi_x / (2 ** (i+1)))**2)
+            conv_list.append(ConvLSTM_block(lstm_length, channel, channel, kernel_size, padding, batch_first))
+        self.convlstm_layers = nn.ModuleList(conv_list)
+
+    def forward(self, features_list):
+        for i, convlstm in enumerate(self.convlstm_layers):
+            if convlstm is None:
+                continue
+            features_list[i] = convlstm(features_list[i])
+        return features_list
+
+class MyFlexibleUNet3dMultiScaleLSTM(nn.Module):
+    def __init__(self, args):
+        super().__init__()
+        self.flexibleUNet = FlexibleUNet(
+            in_channels=1,
+            out_channels=1,
+            backbone=f"efficientnet-{args.eff}",
+            spatial_dims=3,
+            dropout=args.dropout_rate,
+        )
+        # Add MultiScaleConvLSTM layer after the last convolution layer in the encoder
+        backbone_channels = encoder_feature_channel[f"efficientnet-{args.eff}"]
+        self.multi_scale_conv_lstm = MultiScaleConvLSTM(args=args, backbone_channels=backbone_channels)
+        self.conv1 = Convolution(spatial_dims=3, in_channels=1, out_channels=1, kernel_size=(1, 1, args.num_channel), strides=1, padding=0)
+
+        self.sig = nn.Sigmoid()
+
+    def forward(self, x):
+        x_out = self.flexibleUNet.encoder(x)
+        # x_out = self.multi_scale_conv_lstm(x_out)
+        x_out = self.flexibleUNet.decoder(x_out)
+        x_out = self.flexibleUNet.segmentation_head(x_out)
+        x_out = self.conv1(x_out)
+        x_out = self.sig(x_out)
+        return x_out
