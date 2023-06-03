@@ -82,7 +82,10 @@ class change_channeld(MapTransform):
 
 # 切片
 class z_clip(Transform):
-    def __init__(self, num_channel=None, is_3d = False, mid = None):
+    def __init__(self, num_channel=None, is_3d = False, mid = None, z_list=None):
+        if isinstance(z_list, list):
+            self.z_list = z_list
+            return
         if num_channel is None:
             raise ValueError("num_channel is None")
         self.num_channel = num_channel
@@ -91,6 +94,15 @@ class z_clip(Transform):
         pass
     
     def __call__(self, data):
+        if self.z_list is not None:
+            start = self.z_list[0]
+            end = self.z_list[1]
+            if self.is_3d:
+                data = data[ :, :, :, start:end]
+            else:
+                data = data[:, start:end, :, :]
+            return data
+        
         if self.num_channel == 65:
             return data
         mid = 65 // 2 if self.mid is None else self.mid

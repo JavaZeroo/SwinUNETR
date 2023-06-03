@@ -32,7 +32,7 @@ from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 from utils.my_acc import FBetaScore
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM, MyFlexibleUNet3dMultiScaleLSTM
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM, MyFlexibleUNet3dMultiScaleLSTM, Net
 from utils.my_loss import CustomWeightedDiceCELoss, CustomWeightedFocalLoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -102,7 +102,7 @@ parser.add_argument("--num_channel", default=65, type=int, help="num of copy cha
 parser.add_argument("--num_samples", default=16, type=int, help="num of samples of transform")
 parser.add_argument("--cache_rate", default=0.4, type=float, help="cache_rate")
 parser.add_argument("--loss_weight", default=(2.0, 1.0), type=tuple, help="cache_rate")
-parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunet', '2dfunetlstm', '3dunet++']")
+parser.add_argument("--model_mode", default="3dswin", help="model_mode ['3dswin', '2dswin', '3dunet', '2dunet', '2dfunet', '2dfunetlstm', '3dunet++', 'kaggle]")
 parser.add_argument("--loss_mode", default="custom", help="loss_mode ['custom', 'focalLoss', 'squared_dice', 'DiceCELoss']")
 parser.add_argument("--eff", default="b5", help="efficientnet-['b0', 'b1', 'b2', 'b3', 'b4', 'b5']")
 parser.add_argument("--debug", action="store_true", help="debug mode")
@@ -155,6 +155,8 @@ def main_worker(gpu, args):
         model = MyFlexibleUNet3dMultiScaleLSTM(args)
     elif args.model_mode == "3dunet++":
         model = MyBasicUNetPlusPlus(args)
+    elif args.model_mode == "kaggle":
+        model = Net()
     else:
         raise ValueError("model mode error")
 
@@ -162,7 +164,7 @@ def main_worker(gpu, args):
     if args.pretrained_model_name is not None:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++", "3dfunetlstm"]:
+        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++", "3dfunetlstm", "kaggle"]:
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
@@ -203,7 +205,7 @@ def main_worker(gpu, args):
             device = "cpu", 
             sw_device = "cuda"
         )
-    elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm"]:
+    elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "kaggle"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y),

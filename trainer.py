@@ -48,7 +48,7 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             # 2d 的是(batch, channel, h, w)
             # 3d 的是(batch, channel=1, h, w, d)
             # '2d 的 channel' 和 '3d的d' 是一个东西
-            if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++"]:
+            if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++", "kaggle"]:
                 logits, target = logits.cuda(0), target.cuda(0)
                 loss = loss_func(logits, target[ :, 0:1, :, :])
             elif args.model_mode in ["3dswin", "3dunet++", "3dfunetlstm"]:
@@ -96,7 +96,7 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                 data, target = batch_data["image"], batch_data["inklabels"]
             if args.model_mode in ["3dswin", "3dunet", "3dunet++", "3dfunetlstm"]:
                 data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
-            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++"]:
+            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++", "kaggle"]:
                 data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
