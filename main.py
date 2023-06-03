@@ -156,7 +156,7 @@ def main_worker(gpu, args):
     elif args.model_mode == "3dunet++":
         model = MyBasicUNetPlusPlus(args)
     elif args.model_mode == "kaggle":
-        model = Net()
+        model = Net(args)
     else:
         raise ValueError("model mode error")
 

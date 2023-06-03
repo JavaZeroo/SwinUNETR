@@ -685,7 +685,7 @@ def get_transforms(args):
                 ),
                 # Drop1Layerd(keys=["image", "label", 'inklabels']),
                 # transforms.CropForegroundd(keys=["image", "label", 'inklabels'], source_key="image"),
-                # printShaped(keys=["image", "label", 'inklabels']),
+                printShaped(keys=["image", "label", 'inklabels']),
                 transforms.RandCropByPosNegLabeld(
                     keys=["image", "label", 'inklabels'],
                     label_key="inklabels",

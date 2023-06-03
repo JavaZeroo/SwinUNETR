@@ -210,7 +210,7 @@ def run_training(
             writer.add_scalar("train_lr", optimizer.param_groups[0]['lr'], epoch)
             
         b_new_best = False
-        if (epoch + 1) % args.val_every == 0:
+        if (epoch) % args.val_every == 0:
             if args.distributed:
                 torch.distributed.barrier()
             epoch_time = time.time()

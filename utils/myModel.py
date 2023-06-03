@@ -301,17 +301,18 @@ import torch.nn.functional as F
 import torch
 
 class Config(object):
-	mode = [
-		#'train', #
-		'test', 'skip_fake_test',
-	]
-	crop_fade  = 56
-	crop_size  = 384
-	crop_depth = 5
-	infer_fragment_z = [28, 37]
+    def __init__(self, args) -> None:
+        self.mode = [
+            #'train', #
+            'test', 'skip_fake_test',
+        ]
+        self.crop_fade  = 56
+        self.crop_size  = args.roi_x
+        self.crop_depth = 5
+        self.infer_fragment_z = [28, 37]
+        pass
 
-CFG = Config()
-CFG.is_tta = True #True
+
 
 class SmpUnetDecoder(nn.Module):
 	def __init__(self,
@@ -343,7 +344,10 @@ class SmpUnetDecoder(nn.Module):
 		return last, decode
 
 class Net(nn.Module):
-	def __init__(self,):
+	def __init__(self,args=None):
+		assert args is not None
+		self.CFG = Config(args=args)
+		self.CFG.is_tta = True #True
 		super().__init__()
 		self.output_type = ['inference', 'loss']
 
@@ -351,7 +355,7 @@ class Net(nn.Module):
 		encoder1_dim  = [conv_dim, 64, 128, 256, 512, ]
 		decoder1_dim  = [256, 128, 64, 64,]
 
-		self.encoder1 = resnet34d(pretrained=False, in_chans=CFG.crop_depth)
+		self.encoder1 = resnet34d(pretrained=False, in_chans=self.CFG.crop_depth)
 
 		self.decoder1 = SmpUnetDecoder(
 			in_channel   = encoder1_dim[-1],
@@ -381,10 +385,10 @@ class Net(nn.Module):
 		self.logit2 = nn.Conv2d(decoder2_dim[-1],1,kernel_size=1)
 
 	def forward(self, batch):
-		v = batch['volume']
+		v = batch
 		B,C,H,W = v.shape
 		vv = [
-			v[:,i:i+CFG.crop_depth] for i in [0,2,4,]
+			v[:,i:i+self.CFG.crop_depth] for i in [0,2,4,]
 		]
 		K = len(vv)
 		x = torch.cat(vv,0)
@@ -439,9 +443,6 @@ class Net(nn.Module):
 		logit2 = self.logit2(last)
 		logit2 = F.interpolate(logit2, size=(H, W), mode='bilinear', align_corners=False, antialias=True)
 
-		output = {
-			'ink' : torch.sigmoid(logit2),
-		}
-		return output
+		return torch.sigmoid(logit2)
 
 ################## NEW MODEL ##################
