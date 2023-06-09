@@ -95,15 +95,21 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
             else:
                 data, target = batch_data["image"], batch_data["inklabels"]
             if args.model_mode in ["3dswin", "3dunet", "3dunet++", "3dfunetlstm"]:
-                data, target = data.cuda(args.rank), target[:, :, :, :, 0:1].cuda(args.rank)
+                data, target = data, target[:, :, :, :, 0:1]
             elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++", "kaggle"]:
-                data, target = data.cuda(args.rank), target[ :, 0:1, :, :].cuda(args.rank)
+                data, target = data, target[ :, 0:1, :, :]
             else:
                 raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
                 # print(data, target)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:
-                    logits = model_inferer(data)
+                    out_1 = []
+                    for i, x in enumerate(range(4)):
+                        temp_out = model_inferer(data.cuda()) if i==0 else torch.rot90(model_inferer(torch.rot90(data, k=i, dims=(-2, -1)).cuda()), k=-i, dims=(-2, -1))
+                        out_1.append(temp_out)
+                    out_1 = torch.stack(out_1, dim=0)
+                    logits = out_1.mean(0)
+                    # logits = model_inferer(data)
                 else:
                     logits = model(data)
             if not logits.is_cuda:
@@ -114,11 +120,11 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                 torch.save(logits, "logits.pt")
                 torch.save(target, "target.pt")
             
-            logits = binary(logits, threshold=args.threshold)
-            target = binary(target, threshold=args.threshold)
             
             if writer is not None:
                 add_fig(writer=writer, y=target, y_pred=logits, global_step=epoch)
+            logits = binary(logits, threshold=args.threshold)
+            target = binary(target, threshold=args.threshold)
             val_outputs_list = decollate_batch(logits)
             # val_output_convert = [post_pred(val_pred_tensor) for val_pred_tensor in val_outputs_list]
             val_labels_list = decollate_batch(target)

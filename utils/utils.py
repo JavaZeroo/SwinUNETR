@@ -672,7 +672,7 @@ def get_transforms(args):
                 Copyd(keys=["label", 'inklabels'],
                       num_channel=args.num_channel, add_channel=True),
                 printShaped(keys=["image", "label", 'inklabels'], debug=args.debug),
-                z_clipd(keys=["image"], z_list=list(range(28, 38))),
+                z_clipd(keys=["image"], z_list=args.z_range),
                 printShaped(keys=["image", "label", 'inklabels'], debug=args.debug),
                 change_channeld(keys=["image", "label", 'inklabels']),
                 transforms.Orientationd(
@@ -711,6 +711,9 @@ def get_transforms(args):
                     keys="image", offsets=0.1, prob=args.RandShiftIntensityd_prob),
                 change_channeld(
                     keys=["image", "label", 'inklabels'], back=True),
+                # transforms.RandGaussianNoised(
+                #     keys=["inklabels"], prob=0.05, std=0.01
+                # ), 
                 # printShaped(keys=["image", "label", 'inklabels']),
                 remove_channeld(keys=["image", "label", 'inklabels']),
                 transforms.ToTensord(keys=["image", 'inklabels']),

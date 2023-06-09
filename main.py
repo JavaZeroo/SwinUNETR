@@ -111,13 +111,18 @@ parser.add_argument("--test", action="store_true", help="test mode")
 parser.add_argument("--normal", action="store_true", help="use monai Dataset class")
 parser.add_argument("--mid", default=None, type=int, help="num of samples of transform")
 parser.add_argument("--threshold", default=0.4, type=int, help="num of samples of transform")
+parser.add_argument("--z_range_0", default=None, type=int, help="num of samples of transform")
+parser.add_argument("--z_range_1", default=None, type=int, help="num of samples of transform")
 
 def main():
     args = parser.parse_args()
     args.amp = not args.noamp
     args.use_normal_dataset = args.normal if args.normal else args.use_normal_dataset
-    args.logdir = f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%d-%H-%M', time.gmtime(time.time()))}"
-    args.logdir = "./runs/" + args.logdir
+    if args.z_range_0 is not None and args.z_range_1 is not None:
+        args.roi_z = args.z_range_1 - args.z_range_0
+        args.z_range = [args.z_range_0, args.z_range_1]
+    args.logdir = f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%dd_%Hh-%Mm', time.localtime(time.time()))}"
+    args.logdir = "./runs/" + args.logdir if not args.debug else './debug'
     args.num_channel = args.roi_z
     if args.debug:
         args.val_every = 1
@@ -181,7 +186,7 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'DiceCELoss':
         loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
     elif args.loss_mode == 'custom':
-        loss = CustomWeightedDiceCELoss(ink_weight=2.0, weight=args.loss_weight)
+        loss = CustomWeightedDiceCELoss(ink_weight=1.5, weight=args.loss_weight)
     elif args.loss_mode == 'DiceFocalLoss':
         loss = DiceFocalLoss(weight=args.loss_weight)
         

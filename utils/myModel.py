@@ -309,7 +309,7 @@ class Config(object):
         self.crop_fade  = 56
         self.crop_size  = args.roi_x
         self.crop_depth = 5
-        self.infer_fragment_z = [28, 37]
+        self.infer_fragment_z = args.z_range
         pass
 
 
@@ -347,7 +347,6 @@ class Net(nn.Module):
 	def __init__(self,args=None):
 		assert args is not None
 		self.CFG = Config(args=args)
-		self.CFG.is_tta = True #True
 		super().__init__()
 		self.output_type = ['inference', 'loss']
 
@@ -355,7 +354,7 @@ class Net(nn.Module):
 		encoder1_dim  = [conv_dim, 64, 128, 256, 512, ]
 		decoder1_dim  = [256, 128, 64, 64,]
 
-		self.encoder1 = resnet34d(pretrained=False, in_chans=self.CFG.crop_depth)
+		self.encoder1 = resnet34d(pretrained=True, in_chans=self.CFG.crop_depth)
 
 		self.decoder1 = SmpUnetDecoder(
 			in_channel   = encoder1_dim[-1],
@@ -375,7 +374,7 @@ class Net(nn.Module):
 		#
 		encoder2_dim  = [64, 128, 256, 512]#
 		decoder2_dim  = [128, 64, 32, ]
-		self.encoder2 = resnet10t(pretrained=False, in_chans=decoder1_dim[-1])
+		self.encoder2 = resnet10t(pretrained=True, in_chans=decoder1_dim[-1])
 
 		self.decoder2 = SmpUnetDecoder(
 			in_channel   = encoder2_dim[-1],
@@ -446,3 +445,5 @@ class Net(nn.Module):
 		return torch.sigmoid(logit2)
 
 ################## NEW MODEL ##################
+
+

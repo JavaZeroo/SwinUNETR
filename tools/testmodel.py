@@ -47,7 +47,7 @@ class Config(object):
 		'test', 'skip_fake_test',
 	]
 	crop_fade  = 56
-	crop_size  = 384
+	crop_size  = 512
 	crop_depth = 5
 	infer_fragment_z = [28, 37]
 

@@ -14,3 +14,4 @@ pretrained_models/*
 binary.npy
 tensorboard.output.log
 anaysis/
+debug/
