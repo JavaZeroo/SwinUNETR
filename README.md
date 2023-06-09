@@ -26,3 +26,8 @@ nohup tensorboard --port 6007 --logdir /root/autodl-tmp/SwinUNETR/runs &
 ```bash
 python main.py --model_mode 2dfunetlstm --roi_x 512 --roi_y 512 --num_samples 20 --save_checkpoint --workers 0 --val_every 10 --lrschedule cosine_anneal --optim_lr 9e-4 --roi_z 22 --cache_rate 1.0 --eff b5 --optim_name sgd --mid 18  --max_epochs 2000 
 ```
+
+上次训练的代码
+```bash
+python main.py --model_mode 2dfunetlstm --eff b6 --roi_x 384 --roi_y 384 --num_samples 10 --save_checkpoint  --val_every 40 --lrschedule warmup_cosine --optim_lr 4e-4  --cache_rate 1.0 --optim_name adamw  --max_epochs 3000 --normal --workers 10 --mid 19 --roi_z 22
+```
