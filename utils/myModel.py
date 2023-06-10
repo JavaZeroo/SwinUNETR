@@ -200,6 +200,57 @@ class ConvLSTM_block(nn.Module):
 
         return x_out
 
+
+
+##### transformer
+
+class TransformerBlock(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout, forward_expansion):
+        super(TransformerBlock, self).__init__()
+        self.attention = nn.MultiheadAttention(embed_dim, num_heads)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.transformer_block = nn.TransformerEncoderLayer(
+            d_model=embed_dim, nhead=num_heads, dropout=dropout,
+            dim_feedforward=embed_dim*forward_expansion
+        )
+
+    def forward(self, value, key, query):
+        attention = self.attention(query, key, value)[0]
+        add_attention = query + attention
+        norm_attention = self.norm1(add_attention)
+        output = self.transformer_block(norm_attention)
+        return output
+
+# 在MultiScaleConvLSTM类中添加TransformerBlock
+class MultiScaleConvLSTMtransformer(nn.Module):
+    def __init__(self, args, backbone_channels, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        assert args.roi_x == args.roi_y, "ROI x and y must be the same"
+        conv_list = []
+        for i, channel in enumerate(backbone_channels):
+            if i == 0 or i ==1:
+                conv_list.append(None)
+                continue
+            lstm_length = int((args.roi_x / (2 ** (i+1)))**2)
+            conv_list.append(ConvLSTM_block(lstm_length, channel, channel, kernel_size, padding, batch_first))
+        self.convlstm_layers = nn.ModuleList(conv_list)
+        self.transformer_block = TransformerBlock(embed_dim=lstm_length, num_heads=4, dropout=0.1, forward_expansion=4)
+
+    def forward(self, features_list):
+        for i, convlstm in enumerate(self.convlstm_layers):
+            if convlstm is None:
+                continue
+            features_list[i] = convlstm(features_list[i])
+        # take the last element in the feature list as query, key, and value for the attention
+        query = key = value = features_list[-1]
+        # pass the output of the convlstm_layers to the TransformerBlock
+        output = self.transformer_block(value, key, query)
+        return output
+
+#####
+
+
 class MultiScaleConvLSTM(nn.Module):
     def __init__(self, args, backbone_channels, kernel_size=1, padding=0, batch_first=True):
         super().__init__()
@@ -233,7 +284,7 @@ class MyFlexibleUNet2dMultiScaleLSTM(nn.Module):
         )
         # Add MultiScaleConvLSTM layer after the last convolution layer in the encoder
         backbone_channels = encoder_feature_channel[f"efficientnet-{args.eff}"]
-        self.multi_scale_conv_lstm = MultiScaleConvLSTM(args=args, backbone_channels=backbone_channels)
+        self.multi_scale_conv_lstm = MultiScaleConvLSTMtransformer(args=args, backbone_channels=backbone_channels)
         self.sig = nn.Sigmoid()
 
     def forward(self, x):
