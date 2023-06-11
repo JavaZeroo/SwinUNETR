@@ -1,7 +1,7 @@
 import torch.nn as nn
 from monai.networks.nets import SwinUNETR, UNet, FlexibleUNet, BasicUNetPlusPlus
 from monai.networks.blocks.convolutions import Convolution
-
+import segmentation_models_pytorch as smp
 
 encoder_feature_channel = {
     "efficientnet-b0": (16, 24, 40, 112, 320),
@@ -173,6 +173,26 @@ class MyBasicUNetPlusPlus(nn.Module):
         
     def forward(self, x):
         x_out = self.basicUNetPlusPlus(x)
+        return x_out
+    
+    
+class MyBasicUNetPlusPlus2d(nn.Module):
+    def __init__(self, args) -> None:
+        super().__init__()
+        self.basicUNetPlusPlus = smp.UnetPlusPlus(
+            encoder_name='resnext50_32x4d', 
+            encoder_weights=None, 
+            classes=1, 
+            in_channels=args.num_channel,
+            activation="sigmoid")
+        # self.basicUNetPlusPlus = BasicUNetPlusPlus(spatial_dims=2, in_channels=args.num_channel, out_channels=1)
+        # self.sig = nn.Sigmoid()
+        
+    def forward(self, x):
+        x_out = self.basicUNetPlusPlus(x)
+        # print(x_out.shape)
+        # x_out = self.sig(x)
+        # print(x_out.shape)
         return x_out
 
 class ConvLSTM_block(nn.Module):

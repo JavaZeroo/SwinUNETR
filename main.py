@@ -32,7 +32,7 @@ from monai.utils.enums import MetricReduction
 from monai.visualize import matshow3d
 from utils.my_acc import FBetaScore
 
-from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM, MyFlexibleUNet3dMultiScaleLSTM, Net
+from utils.myModel import MyModel, MyModel2d, MyModel3dunet, MyFlexibleUNet2d, MyFlexibleUNet2dLSTM, MyBasicUNetPlusPlus, MyFlexibleUNet2dMultiScaleLSTM, MyFlexibleUNet3dMultiScaleLSTM, Net, MyBasicUNetPlusPlus2d
 from utils.my_loss import CustomWeightedDiceCELoss, CustomWeightedFocalLoss
 
 parser = argparse.ArgumentParser(description="Swin UNETR segmentation pipeline")
@@ -160,6 +160,8 @@ def main_worker(gpu, args):
         model = MyFlexibleUNet3dMultiScaleLSTM(args)
     elif args.model_mode == "3dunet++":
         model = MyBasicUNetPlusPlus(args)
+    elif args.model_mode == "2dunet++":
+        model = MyBasicUNetPlusPlus2d(args)
     elif args.model_mode == "kaggle":
         model = Net(args)
     else:
@@ -169,7 +171,7 @@ def main_worker(gpu, args):
     if args.pretrained_model_name is not None:
             # raise ValueError("2d model can not resume from ckpt")
         model_dict = torch.load(os.path.join(pretrained_dir, args.pretrained_model_name))["state_dict"]
-        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++", "3dfunetlstm", "kaggle"]:
+        if args.model_mode in ["2dswin", "3dunet", "2dfunet", "2dfunetlstm", "3dunet++", "3dfunetlstm", "kaggle", "2dunet++"]:
             model.load_state_dict(model_dict)
         elif args.model_mode == "3dswin":
             model.load_swin_ckpt(model_dict)
@@ -184,11 +186,13 @@ def main_worker(gpu, args):
     elif args.loss_mode == 'squared_dice':
         loss = DiceCELoss(squared_pred=True, smooth_nr=args.smooth_nr, smooth_dr=args.smooth_dr)
     elif args.loss_mode == 'DiceCELoss':
-        loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])) # Normally
+        loss = DiceCELoss(include_background=True, sigmoid=True, ce_weight=torch.Tensor([ 10])).cuda(0) # Normally
     elif args.loss_mode == 'custom':
         loss = CustomWeightedDiceCELoss(ink_weight=1.5, weight=args.loss_weight)
     elif args.loss_mode == 'DiceFocalLoss':
         loss = DiceFocalLoss(weight=args.loss_weight)
+    elif args.loss_mode == 'bce':
+        loss = torch.nn.BCEWithLogitsLoss()
         
     # acc函数
     post_label = AsDiscrete(to_onehot=args.out_channels)
@@ -210,7 +214,7 @@ def main_worker(gpu, args):
             device = "cpu", 
             sw_device = "cuda"
         )
-    elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "kaggle"]:
+    elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "kaggle", "2dunet++"]:
         model_inferer = partial(
             sliding_window_inference,
             roi_size = (args.roi_x,args.roi_y),

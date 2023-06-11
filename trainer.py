@@ -49,8 +49,11 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             # 3d 的是(batch, channel=1, h, w, d)
             # '2d 的 channel' 和 '3d的d' 是一个东西
             if args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm","2dunet++", "kaggle"]:
-                logits, target = logits.cuda(0), target.cuda(0)
-                loss = loss_func(logits, target[ :, 0:1, :, :])
+                logits, target = logits.cuda(0), target[ :, 0:1, :, :].cuda(0)
+                if args.debug:
+                    print(logits.shape, target.shape)
+                    print(logits.device, target.device)
+                loss = loss_func(logits, target)
             elif args.model_mode in ["3dswin", "3dunet++", "3dfunetlstm"]:
                 if args.debug:
                     print(logits)
@@ -71,12 +74,12 @@ def train_epoch(model, loader, optimizer, scaler, epoch, loss_func, args):
             optimizer.step()
 
         run_loss.update(loss.item(), n=args.batch_size)
-        if args.rank == 0:
-            print(
-                "Epoch {}/{} {}/{}".format(epoch, args.max_epochs, idx, len(loader)),
-                "loss: {:.4f}".format(run_loss.avg),
-                "time {:.2f}s".format(time.time() - start_time),
-            )
+        # if args.rank == 0 and idx+1 == len(loader):
+        #     print(
+        #         "Epoch {}/{} {}/{}".format(epoch, args.max_epochs, idx+1, len(loader)),
+        #         "loss: {:.4f}".format(run_loss.avg),
+        #         "time {:.2f}s".format(time.time() - start_time),
+        #     )
         start_time = time.time()
     for param in model.parameters():
         param.grad = None
@@ -96,10 +99,10 @@ def val_epoch(model, loader, epoch, acc_func, loss_func, args, model_inferer=Non
                 data, target = batch_data["image"], batch_data["inklabels"]
             if args.model_mode in ["3dswin", "3dunet", "3dunet++", "3dfunetlstm"]:
                 data, target = data, target[:, :, :, :, 0:1]
-            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++", "kaggle"]:
+            elif args.model_mode in ["2dswin", "2dfunet", "2dfunetlstm", "2dunet++", "kaggle", "2dunet++"]:
                 data, target = data, target[ :, 0:1, :, :]
             else:
-                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet']")
+                raise ValueError("model_mode should be ['3dswin', '2dswin', '3dunet', '2dunet', '2dunet++']")
                 # print(data, target)
             with autocast(enabled=args.amp):
                 if model_inferer is not None:

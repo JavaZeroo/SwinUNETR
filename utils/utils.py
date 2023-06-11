@@ -565,7 +565,7 @@ def get_transforms(args):
                 transforms.ToTensord(keys=["image"]),
             ]
         )
-    elif args.model_mode in ["2dfunet", "2dfunetlstm"]:
+    elif args.model_mode in ["2dfunet", "2dfunetlstm", "2dunet++"]:
         train_transform = transforms.Compose(
             [
                 transforms.LoadImaged(
