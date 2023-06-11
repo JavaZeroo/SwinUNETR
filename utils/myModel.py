@@ -242,6 +242,31 @@ class TransformerBlock(nn.Module):
         output = self.transformer_block(norm_attention)
         return output
 
+class ConvLSTMtransformer_block(nn.Module):
+    def __init__(self, lstm_length, in_channels=320, out_channels=320, kernel_size=1, padding=0, batch_first=True):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, padding=padding)
+        # self.lstm = nn.LSTM(lstm_length, lstm_length, batch_first=batch_first)
+        self.transformer_block = TransformerBlock(embed_dim=lstm_length, num_heads=4, dropout=0.1, forward_expansion=4)
+    def forward(self, x):
+
+
+        batch_size, channels, height, width = x.shape
+
+        # Apply 2D convolution
+        x_out = self.conv(x)
+
+        # Reshape output for LSTM
+        x_out = x_out.view(batch_size, -1, height * width)
+
+        # Pass through LSTM
+        lstm_out = self.transformer_block(x_out, x_out, x_out)
+                
+        # Reshape output back to original shape
+        x_out = lstm_out.view(batch_size, channels, height, width)
+
+        return x_out
+    
 # 在MultiScaleConvLSTM类中添加TransformerBlock
 class MultiScaleConvLSTMtransformer(nn.Module):
     def __init__(self, args, backbone_channels, kernel_size=1, padding=0, batch_first=True):
@@ -249,13 +274,12 @@ class MultiScaleConvLSTMtransformer(nn.Module):
         assert args.roi_x == args.roi_y, "ROI x and y must be the same"
         conv_list = []
         for i, channel in enumerate(backbone_channels):
-            if i == 0 or i ==1:
+            if i == 0 or i ==1 or i ==2:
                 conv_list.append(None)
                 continue
             lstm_length = int((args.roi_x / (2 ** (i+1)))**2)
-            conv_list.append(ConvLSTM_block(lstm_length, channel, channel, kernel_size, padding, batch_first))
+            conv_list.append(ConvLSTMtransformer_block(lstm_length, channel, channel, kernel_size, padding, batch_first))
         self.convlstm_layers = nn.ModuleList(conv_list)
-        self.transformer_block = TransformerBlock(embed_dim=lstm_length, num_heads=4, dropout=0.1, forward_expansion=4)
 
     def forward(self, features_list):
         for i, convlstm in enumerate(self.convlstm_layers):
@@ -263,10 +287,10 @@ class MultiScaleConvLSTMtransformer(nn.Module):
                 continue
             features_list[i] = convlstm(features_list[i])
         # take the last element in the feature list as query, key, and value for the attention
-        query = key = value = features_list[-1]
-        # pass the output of the convlstm_layers to the TransformerBlock
-        output = self.transformer_block(value, key, query)
-        return output
+        # query = key = value = features_list[-1]
+        # # pass the output of the convlstm_layers to the TransformerBlock
+        # output = self.transformer_block(value, key, query)
+        return features_list
 
 #####
 
