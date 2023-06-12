@@ -395,17 +395,17 @@ from einops import rearrange
 import torch.nn.functional as F
 import torch
 
-class Config(object):
-    def __init__(self, args) -> None:
-        self.mode = [
-            #'train', #
-            'test', 'skip_fake_test',
-        ]
-        self.crop_fade  = 56
-        self.crop_size  = args.roi_x
-        self.crop_depth = 5
-        self.infer_fragment_z = args.z_range
-        pass
+# class Config(object):
+#     def __init__(self, args) -> None:
+#         self.mode = [
+#             #'train', #
+#             'test', 'skip_fake_test',
+#         ]
+#         self.crop_fade  = 56
+#         self.crop_size  = args.roi_x
+#         self.crop_depth = 5
+#         self.infer_fragment_z = args.z_range
+#         pass
 
 
 
@@ -438,106 +438,90 @@ class SmpUnetDecoder(nn.Module):
 		last  = d
 		return last, decode
 
+class Config(object):
+    valid_threshold = 0.80
+    beta = 1
+    crop_fade  = 32
+    crop_size  = 128 #256 
+    crop_depth = 5
+    infer_fragment_z = [
+        32-16,
+        32+16,
+    ]#32 slices
+    dz = 0
+CFG1 = Config()
+
+
 class Net(nn.Module):
-	def __init__(self,args=None):
-		assert args is not None
-		self.CFG = Config(args=args)
-		super().__init__()
-		self.output_type = ['inference', 'loss']
+    def __init__(self, args):
+        super().__init__()
+        self.output_type = ['inference', 'loss']
 
-		conv_dim = 64
-		encoder1_dim  = [conv_dim, 64, 128, 256, 512, ]
-		decoder1_dim  = [256, 128, 64, 64,]
+        # --------------------------------
+        CFG = CFG1
+        self.crop_depth = CFG.crop_depth
 
-		self.encoder1 = resnet34d(pretrained=True, in_chans=self.CFG.crop_depth)
+        conv_dim = 64
+        encoder_dim = [conv_dim, 64, 128, 256, 512, ]
+        decoder_dim = [256, 128, 64, 32, 16]
 
-		self.decoder1 = SmpUnetDecoder(
-			in_channel   = encoder1_dim[-1],
-			skip_channel = encoder1_dim[:-1][::-1],
-			out_channel  = decoder1_dim,
-		)
-		# -- pool attention weight
-		self.weight1 = nn.ModuleList([
-			nn.Sequential(
-				nn.Conv2d(dim, dim, kernel_size=3, padding=1),
-				nn.ReLU(inplace=True),
-			) for dim in encoder1_dim
-		])
-		self.logit1 = nn.Conv2d(decoder1_dim[-1],1,kernel_size=1)
+        self.encoder = resnet34d(pretrained=True, in_chans=self.crop_depth)
 
-		#--------------------------------
-		#
-		encoder2_dim  = [64, 128, 256, 512]#
-		decoder2_dim  = [128, 64, 32, ]
-		self.encoder2 = resnet10t(pretrained=True, in_chans=decoder1_dim[-1])
+        self.decoder = SmpUnetDecoder(
+            in_channel=encoder_dim[-1],
+            skip_channel=encoder_dim[:-1][::-1] + [0],
+            out_channel=decoder_dim,
+        )
+        self.logit = nn.Conv2d(decoder_dim[-1], 1, kernel_size=1)
 
-		self.decoder2 = SmpUnetDecoder(
-			in_channel   = encoder2_dim[-1],
-			skip_channel = encoder2_dim[:-1][::-1],
-			out_channel  = decoder2_dim,
-		)
-		self.logit2 = nn.Conv2d(decoder2_dim[-1],1,kernel_size=1)
+        # --------------------------------
+        self.aux = nn.ModuleList([
+            nn.Conv2d(encoder_dim[i], 1, kernel_size=1, padding=0) for i in range(len(encoder_dim))
+        ])
 
-	def forward(self, batch):
-		v = batch
-		B,C,H,W = v.shape
-		vv = [
-			v[:,i:i+self.CFG.crop_depth] for i in [0,2,4,]
-		]
-		K = len(vv)
-		x = torch.cat(vv,0)
-		#x = v
 
-		#----------------------
-		encoder = []
-		e = self.encoder1
-		x = e.conv1(x)
-		x = e.bn1(x)
-		x = e.act1(x);
-		encoder.append(x)
-		x = F.avg_pool2d(x, kernel_size=2, stride=2)
-		x = e.layer1(x);
-		encoder.append(x)
-		x = e.layer2(x);
-		encoder.append(x)
-		x = e.layer3(x);
-		encoder.append(x)
-		x = e.layer4(x);
-		encoder.append(x)
-		# print('encoder', [f.shape for f in encoder])
+    def forward(self, batch):
+        v = batch
+        B, C, H, W = v.shape
+        vv = [
+            v[:, i:i + self.crop_depth] for i in range(0,C-self.crop_depth+1,2)
+        ]
+        K = len(vv)
+        x = torch.cat(vv, 0)
 
-		for i in range(len(encoder)):
-			e = encoder[i]
-			f = self.weight1[i](e)
-			_, c, h, w = e.shape
-			f = rearrange(f, '(K B) c h w -> B K c h w', K=K, B=B, h=h, w=w)  #
-			e = rearrange(e, '(K B) c h w -> B K c h w', K=K, B=B, h=h, w=w)  #
-			w = F.softmax(f, 1)
-			e = (w * e).sum(1)
-			encoder[i] = e
+        # ---------------------------------
 
-		feature = encoder[-1]
-		skip = encoder[:-1][::-1]
-		last, decoder = self.decoder1(feature, skip)
-		logit1 = self.logit1(last)
+        encoder = []
+        e = self.encoder
 
-		#----------------------
-		x = last #.detach()
-		#x = F.avg_pool2d(x,kernel_size=2,stride=2)
-		encoder = []
-		e = self.encoder2
-		x = e.layer1(x); encoder.append(x)
-		x = e.layer2(x); encoder.append(x)
-		x = e.layer3(x); encoder.append(x)
-		x = e.layer4(x); encoder.append(x)
+        x = e.conv1(x)
+        x = e.bn1(x)
+        x = e.act1(x); encoder.append(x)
+        x = F.avg_pool2d(x, kernel_size=2, stride=2)
+        x = e.layer1(x); encoder.append(x)
+        x = e.layer2(x); encoder.append(x)
+        x = e.layer3(x); encoder.append(x)
+        x = e.layer4(x); encoder.append(x)
+        ##[print('encoder',i,f.shape) for i,f in enumerate(encoder)]
 
-		feature = encoder[-1]
-		skip = encoder[:-1][::-1]
-		last, decoder = self.decoder2(feature, skip)
-		logit2 = self.logit2(last)
-		logit2 = F.interpolate(logit2, size=(H, W), mode='bilinear', align_corners=False, antialias=True)
+        for i in range(len(encoder)):
+            e = encoder[i]
+            _, c, h, w = e.shape
+            e = rearrange(e, '(K B) c h w -> K B c h w', K=K, B=B, h=h, w=w)
+            encoder[i] = e.mean(0)
 
-		return torch.sigmoid(logit2)
+        last, decoder = self.decoder(feature = encoder[-1], skip = encoder[:-1][::-1]  + [None])
+
+
+        # ---------------------------------
+        logit = self.logit(last)
+
+        if 1:
+            if logit.shape[2:]!=(H, W):
+                logit = F.interpolate(logit, size=(H, W), mode='bilinear', align_corners=False, antialias=True)
+            output = torch.sigmoid(logit)
+
+        return output
 
 ################## NEW MODEL ##################
 
