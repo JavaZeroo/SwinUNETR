@@ -203,7 +203,6 @@ class ConvLSTM_block(nn.Module):
 
     def forward(self, x):
 
-
         batch_size, channels, height, width = x.shape
 
         # Apply 2D convolution

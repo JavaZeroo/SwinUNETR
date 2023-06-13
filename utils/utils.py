@@ -574,7 +574,7 @@ def get_transforms(args):
                 Copyd(keys=["label", 'inklabels'],
                       num_channel=args.num_channel, add_channel=True),
                 printShaped(keys=["image", "label", 'inklabels'], debug=args.debug),
-                z_clipd(keys=["image"], num_channel=args.num_channel, mid=args.mid),
+                z_clipd(keys=["image"], num_channel=args.num_channel, mid=args.mid, add_shuffled=args.add_shuffled),
                 printShaped(keys=["image", "label", 'inklabels'], debug=args.debug),
                 change_channeld(keys=["image", "label", 'inklabels']),
                 transforms.Orientationd(

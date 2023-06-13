@@ -113,6 +113,8 @@ parser.add_argument("--mid", default=None, type=int, help="num of samples of tra
 parser.add_argument("--threshold", default=0.4, type=int, help="num of samples of transform")
 parser.add_argument("--z_range_0", default=None, type=int, help="num of samples of transform")
 parser.add_argument("--z_range_1", default=None, type=int, help="num of samples of transform")
+parser.add_argument("--add_shuffled", default=0, type=int, help="num of add_shuffled")
+
 
 def main():
     args = parser.parse_args()
@@ -121,6 +123,8 @@ def main():
     if args.z_range_0 is not None and args.z_range_1 is not None:
         args.roi_z = args.z_range_1 - args.z_range_0
         args.z_range = [args.z_range_0, args.z_range_1]
+    else:
+        args.z_range = [args.mid - args.roi_z // 2, args.mid + args.roi_z // 2]
     args.logdir = f"{args.roi_x}_{args.model_mode}_{args.eff}_{args.roi_z}_mid{args.mid}_{args.optim_name}_{time.strftime('%b-%dd_%Hh-%Mm', time.localtime(time.time()))}"
     args.logdir = "./runs/" + args.logdir if not args.debug else './debug'
     args.num_channel = args.roi_z

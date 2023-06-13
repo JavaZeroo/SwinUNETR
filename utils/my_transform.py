@@ -81,12 +81,14 @@ class change_channeld(MapTransform):
         return d
 
 # 切片
+import random
 class z_clip(Transform):
-    def __init__(self, num_channel=None, is_3d = False, mid = None, z_list=None):
+    def __init__(self, num_channel=None, is_3d = False, mid = None, z_list=None, add_shuffled=None):
         self.num_channel = num_channel
         self.is_3d = is_3d
         self.mid = mid
         self.z_list = z_list
+        self.add_shuffled = add_shuffled
         if isinstance(z_list, list):
             return
         if num_channel is None:
@@ -106,6 +108,7 @@ class z_clip(Transform):
         if self.num_channel == 65:
             return data
         mid = 65 // 2 if self.mid is None else self.mid
+        mid = mid + random.randint(-self.add_shuffled, self.add_shuffled) if self.add_shuffled else mid
         start = mid - self.num_channel // 2
         end = mid + self.num_channel // 2
         assert start >= 0 and end <= 65, f"z_clip is not allow for start: {start}, end: {end}"
@@ -121,7 +124,7 @@ class z_clipd(MapTransform):
     """
     Dictionary-based wrapper of :py:class:`monai.transforms.AddChannel`.
     """
-    def __init__(self, keys: KeysCollection, num_channel=None, is_3d = False, mid = None, z_list= None) -> None:
+    def __init__(self, keys: KeysCollection, num_channel=None, is_3d = False, mid = None, z_list= None, add_shuffled=None) -> None:
         """
         Args:
             keys: keys of the corresponding items to be transformed.
@@ -130,7 +133,7 @@ class z_clipd(MapTransform):
         """
         super().__init__(keys, )
 
-        self.adder = z_clip(num_channel=num_channel, is_3d=is_3d, mid=mid, z_list=z_list)
+        self.adder = z_clip(num_channel=num_channel, is_3d=is_3d, mid=mid, z_list=z_list, add_shuffled=add_shuffled)
         pass
     
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Dict[Hashable, NdarrayOrTensor]:
